@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Tycoon</title>
+    <!-- Importing Google Fonts for Typography & Hierarchy -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="main.css">
+</head>
+<body>
+
+    <!-- OVERLAYS: Toasts & Modals -->
+    <div id="toast-container"></div>
+    
+    <div id="confirm-overlay" class="hidden">
+        <div class="confirm-dialog">
+            <h3 id="confirm-title">SYSTEM PROMPT</h3>
+            <p id="confirm-msg">Are you sure you want to proceed?</p>
+            <div class="confirm-actions">
+                <button id="btn-confirm-cancel" class="btn-cancel">CANCEL</button>
+                <button id="btn-confirm-ok" class="btn-action">PROCEED</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOP NAVIGATION -->
+    <div class="top-nav">
+        <div class="brand">
+            <span class="logo-icon">💠</span>
+            <span class="logo-text">HARDWARE TYCOON</span>
+        </div>
+        <div class="nav-modes">
+            <button id="btn-current" class="nav-main active">CURRENT PRODUCTS</button>
+            <button id="btn-all" class="nav-main">ALL PRODUCTS</button>
+        </div>
+    </div>
+
+    <!-- MAIN APP LAYOUT (Sidebar + Content) -->
+    <div class="app-container">
+        
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <div class="nav-group">
+                <span class="label">PARTS</span>
+                <button class="nav-item" data-type="cpu">CPU</button>
+                <button class="nav-item" data-type="gpu">GPU</button>
+                <button class="nav-item" data-type="ram">RAM</button>
+                <button class="nav-item" data-type="storage">STORAGE</button>
+                <button class="nav-item" data-type="mobo">MOBO</button>
+                <button class="nav-item" data-type="camera">CAMERA</button>
+                <button class="nav-item" data-type="display">DISPLAY</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="nav-group">
+                <span class="label">PRODUCTS</span>
+                <button class="nav-item" data-type="desktop">Desktop</button>
+                <button class="nav-item" data-type="console">Console</button>
+                <button class="nav-item" data-type="laptop">Laptop</button>
+                <button class="nav-item" data-type="smartphone">Smartphone</button>
+                <button class="nav-item" data-type="server">Server</button>
+            </div>
+        </div>
+
+        <!-- CONTENT AREA -->
+        <div class="main-content">
+            
+            <!-- BREADCRUMB -->
+            <div class="breadcrumb-bar">
+                <div id="breadcrumb" class="breadcrumb">
+                    <span>MARKETPLACE</span> <span class="separator">/</span> <span class="highlight">CURRENT LINEUP</span>
+                </div>
+            </div>
+
+            <!-- WORKSPACE -->
+            <div id="workspace-wrapper">
+                <div class="workspace-bg-grid"></div> <!-- Subtle grid overlay -->
+                <div id="workspace" class="fade-in">
+                    <!-- Dynamic Content Renders Here -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODULE SCRIPTS -->
+    <script src="save.js"></script>
+    <script src="cpu.js"></script>
+    <script src="gpu.js"></script>
+    <script src="ram.js"></script>
+    <script src="storage.js"></script>
+    <script src="mobo.js"></script>
+    <script src="camera.js"></script>
+    <script src="display.js"></script>
+    <script src="desktop.js"></script>
+    <script src="console.js"></script>
+    <script src="smartphone.js"></script>
+    <script src="laptop.js"></script>
+    <script src="server.js"></script>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let currentPart = null;       // e.g., 'cpu', 'gpu'
+        let currentCategory = null;   // e.g., 'PARTS', 'PRODUCTS'
+        let currentView = 'storefront'; // 'storefront', 'inventory', or 'architect'
+
+        // --- GLOBAL UI FUNCTIONS ---
+        // Toast Notification System
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✓' : 'ℹ'}</span> ${message}`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        // Custom Confirm Dialog
+        window.showConfirm = function(message, onConfirm) {
+            const overlay = document.getElementById('confirm-overlay');
+            const msgEl = document.getElementById('confirm-msg');
+            const btnOk = document.getElementById('btn-confirm-ok');
+            const btnCancel = document.getElementById('btn-confirm-cancel');
+
+            msgEl.textContent = message;
+            overlay.classList.remove('hidden');
+
+            const cleanup = () => {
+                overlay.classList.add('hidden');
+                btnOk.removeEventListener('click', handleOk);
+                btnCancel.removeEventListener('click', handleCancel);
+            };
+
+            const handleOk = () => { cleanup(); onConfirm(); };
+            const handleCancel = () => { cleanup(); };
+
+            btnOk.addEventListener('click', handleOk);
+            btnCancel.addEventListener('click', handleCancel);
+        };
+
+        // --- A. NAVIGATION HANDLERS ---
+        
+        // 1. Sidebar Links (Architect View)
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const type = this.dataset.type;
+                const category = this.closest('.nav-group').querySelector('.label').innerText;
+                
+                currentPart = type;
+                currentCategory = category;
+                currentView = 'architect';
+
+                // Visuals: Un-highlight top buttons, highlight sidebar
+                document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                updateTabButtons();
+                updateBreadcrumb();
+                transitionWorkspace();
+            });
+        });
+
+        // 2. Top Nav Links (Global Views)
+        const btnCurrent = document.getElementById('btn-current');
+        const btnAll = document.getElementById('btn-all');
+
+        btnCurrent.addEventListener('click', () => {
+            currentView = 'storefront';
+            currentPart = null; // Exit architect mode
+            
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+            
+            updateTabButtons();
+            updateBreadcrumb();
+            transitionWorkspace();
+        });
+
+        btnAll.addEventListener('click', () => {
+            currentView = 'inventory';
+            currentPart = null; // Exit architect mode
+            
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+            
+            updateTabButtons();
+            updateBreadcrumb();
+            transitionWorkspace();
+        });
+
+        function updateTabButtons() {
+            btnCurrent.classList.toggle('active', currentView === 'storefront');
+            btnAll.classList.toggle('active', currentView === 'inventory');
+        }
+
+        function updateBreadcrumb() {
+            const bc = document.getElementById('breadcrumb');
+            if(currentView === 'storefront') {
+                bc.innerHTML = `<span>MARKETPLACE</span> <span class="separator">/</span> <span class="highlight">CURRENT LINEUP</span>`;
+            } else if(currentView === 'inventory') {
+                bc.innerHTML = `<span>DATABASE</span> <span class="separator">/</span> <span class="highlight">ALL PRODUCTS</span>`;
+            } else if(currentView === 'architect') {
+                bc.innerHTML = `<span>${currentCategory} R&D</span> <span class="separator">/</span> <span class="highlight">${currentPart.toUpperCase()}</span>`;
+            }
+        }
+
+        // --- B. DYNAMIC RENDER ENGINE (With Animation) ---
+        function transitionWorkspace() {
+            const workspace = document.getElementById('workspace');
+            
+            // Fade out
+            workspace.classList.remove('visible');
+            
+            setTimeout(() => {
+                renderWorkspace();
+                // Fade in
+                workspace.classList.add('visible');
+            }, 150); // Matches CSS transition time
+        }
+
+        function renderWorkspace() {
+            const workspace = document.getElementById('workspace');
+            workspace.innerHTML = ""; // Clear previous content
+
+            // MODE 1: STOREFRONT (MARKETPLACE)
+            if (currentView === 'storefront') {
+                if (window.renderStorefront) {
+                    window.renderStorefront();
+                } else {
+                    workspace.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon pulse">🛒</div>
+                            <h2 class="empty-title">STOREFRONT OFFLINE</h2>
+                            <p class="empty-desc">Storefront UI module is not yet implemented in save.js.</p>
+                        </div>`;
+                }
+                return;
+            }
+
+            // MODE 2: INVENTORY (DATABASE)
+            if (currentView === 'inventory') {
+                if (window.renderInventory) {
+                    window.renderInventory();
+                } else {
+                    workspace.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">📁</div>
+                            <h2 class="empty-title">DATABASE OFFLINE</h2>
+                            <p class="empty-desc">Save system (save.js) module not detected.</p>
+                        </div>`;
+                }
+                return;
+            }
+
+            // MODE 3: ARCHITECT (DESIGN LAB)
+            if (currentView === 'architect') {
+                // FIX: 'console' is a reserved browser word.
+                let moduleName = currentPart;
+                if (moduleName === 'console') moduleName = 'consoleArch';
+                
+                const module = window[moduleName];
+
+                if (module && typeof module.render === 'function') {
+                    // Render the Architect
+                    module.render(workspace);
+                } else {
+                    // Stylized Empty State / Missing script
+                    workspace.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon pulse">⚠️</div>
+                            <h2 class="empty-title">${currentPart.toUpperCase()} DIVISION INACTIVE</h2>
+                            <p class="empty-desc">This R&D department has not been established yet.</p>
+                            <small>Deploy <code>${currentPart}.js</code> to commence operations.</small>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Trigger initial load directly into Storefront
+        window.addEventListener('DOMContentLoaded', () => {
+            transitionWorkspace();
+        });
+    </script>
+</body>
+</html>
