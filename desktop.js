@@ -295,7 +295,13 @@ window.desktop = {
         const infraCost = (chassis?.cost||0) + (psu?.cost||0) + (cooler?.cost||0);
         const totalCost = partsCost + infraCost;
         
-        const sellPrice = parseFloat(document.getElementById('sys-price').value) || 0;
+        const priceInput = document.getElementById('sys-price');
+        const manualPrice = parseFloat(priceInput.value);
+        const suggestedPrice = Math.ceil(totalCost * 1.25);
+        const sellPrice = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : suggestedPrice;
+        if ((!Number.isFinite(manualPrice) || manualPrice <= 0) && priceInput) {
+            priceInput.value = sellPrice;
+        }
         const profit = sellPrice - totalCost;
 
         // 6. RENDER STATS
@@ -311,6 +317,9 @@ window.desktop = {
                     <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                     <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
                         <span>Bill of Materials:</span> <span style="color:#aaa">$${totalCost}</span>
+                    </li>
+                    <li style="display:flex; justify-content:space-between;">
+                        <span>Suggested Price:</span> <b>$${suggestedPrice}</b>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
                         <span>Net Profit:</span> <b style="color:${profit>0?'#00ff88':'#ff4444'}">$${profit}</b>

@@ -422,7 +422,14 @@ window.smartphone = {
         const batCost = (batCap / 1000) * batTech.costPerAh;
         
         const totalCost = partsCost + batCost + chassis.cost + feat.cost + charge.cost + ramGen.cost + stoGen.cost + mfgCost + os.cost;
-        const profit = sellPrice - totalCost;
+        const priceInput = document.getElementById('phone-price');
+        const manualPrice = parseFloat(priceInput.value);
+        const suggestedPrice = Math.ceil(totalCost * 1.25);
+        const normalizedSellPrice = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : suggestedPrice;
+        if ((!Number.isFinite(manualPrice) || manualPrice <= 0) && priceInput) {
+            priceInput.value = normalizedSellPrice;
+        }
+        const profit = normalizedSellPrice - totalCost;
 
         // --- H. RENDER ---
         const displayUI = document.getElementById('phone-live-stats');
@@ -447,6 +454,9 @@ window.smartphone = {
                     </li>
                     <li style="display:flex; justify-content:space-between;">
                         <span>Bill of Materials:</span> <span style="color:#aaa">-$${Math.floor(totalCost)}</span>
+                    </li>
+                    <li style="display:flex; justify-content:space-between;">
+                        <span>Suggested Price:</span> <b>$${suggestedPrice}</b>
                     </li>
                     <li style="border-top:1px dashed #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.9rem;">
                         <span>Net Profit:</span> <b style="color:${profit>0?'#00e676':'#ff1744'}">$${Math.floor(profit)}</b>

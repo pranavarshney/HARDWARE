@@ -347,7 +347,9 @@ window.server = {
         const annualHours = 8760;
         const opEx3Year = (totalFacWatts / 1000) * 0.10 * annualHours * 3; 
 
-        const profit = contract.budget - (CapEx + opEx3Year);
+        const totalProjectCost = CapEx + opEx3Year;
+        const suggestedBid = Math.ceil(totalProjectCost * 1.15);
+        const profit = contract.budget - totalProjectCost;
 
         // 6. VALIDATION & RENDER
         const display = document.getElementById('srv-live-stats');
@@ -387,6 +389,9 @@ window.server = {
                 <li style="display:flex; justify-content:space-between;">
                     <span>OpEx (3Yr Power):</span> <span style="color:#aaa">-$${(opEx3Year/1000000).toFixed(2)}M</span>
                 </li>
+                <li style="display:flex; justify-content:space-between;">
+                    <span>Suggested Bid:</span> <b>$${(suggestedBid/1000000).toFixed(2)}M</b>
+                </li>
                 <li style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; font-size:0.9rem;">
                     <span>Net Profit:</span> <b style="color:${profit>0?'#00e676':'#ff1744'}">$${(profit/1000000).toFixed(2)}M</b>
                 </li>
@@ -396,6 +401,7 @@ window.server = {
         return { 
             valid: errors.length === 0, 
             profit, clusterTFLOPS, totalNodes, scaleFactor, nodeWatts: realNodeWatts,
+            totalProjectCost, suggestedBid,
             parts: {cpu, gpu, ram, sto}, contract
         };
     },
@@ -505,7 +511,7 @@ window.server = {
         window.sys.saveDesign('Server', {
             name: meta.name,
             year: meta.year,
-            price: physics.contract.budget, // We map contract budget to the display price
+            price: physics.contract.budget,
             specs: specs,
             ...meta,
             profit: physics.profit // Fixing the profit save bug

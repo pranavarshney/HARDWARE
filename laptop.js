@@ -295,7 +295,13 @@ window.laptop = {
         const infraCost = chassis.cost + battery.cost + keyboard.cost + (chargerWatts * 0.5);
         
         const totalCost = partsCost + infraCost;
-        const sellPrice = parseFloat(document.getElementById('lap-price').value) || 0;
+        const priceInput = document.getElementById('lap-price');
+        const manualPrice = parseFloat(priceInput.value);
+        const suggestedPrice = Math.ceil(totalCost * 1.25);
+        const sellPrice = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : suggestedPrice;
+        if ((!Number.isFinite(manualPrice) || manualPrice <= 0) && priceInput) {
+            priceInput.value = sellPrice;
+        }
         const profit = sellPrice - totalCost;
 
         // --- F. RENDER ---
@@ -311,6 +317,9 @@ window.laptop = {
                 <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                 <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
                     <span>Bill of Materials:</span> <span style="color:#aaa">$${Math.floor(totalCost)}</span>
+                </li>
+                <li style="display:flex; justify-content:space-between;">
+                    <span>Suggested Price:</span> <b>$${suggestedPrice}</b>
                 </li>
                 <li style="display:flex; justify-content:space-between;">
                     <span>Net Profit:</span> <b style="color:${profit>0?'#00ff88':'#ff4444'}">$${Math.floor(profit)}</b>
