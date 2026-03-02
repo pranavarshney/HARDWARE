@@ -217,19 +217,8 @@ window.consoleArch = {
 
         // --- C. COST & LOSS LEADER MATH ---
         const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0);
-        // SoC Discount: Fusing chips is cheaper than buying separate parts
-        const socCost = partsCost * 0.7; 
-        
-        const infraCost = (chassis?.cost||0) + (controller?.cost||0) + (cooler?.cost||0) + (psuWatts * 0.15);
-        const manufacturingCost = socCost + infraCost;
-        
-        const priceInput = document.getElementById('con-price');
-        const manualPrice = parseFloat(priceInput.value);
-        const suggestedPrice = Math.ceil(manufacturingCost * 1.2);
-        const sellPrice = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : suggestedPrice;
-        if ((!Number.isFinite(manualPrice) || manualPrice <= 0) && priceInput) {
-            priceInput.value = sellPrice;
-        }
+        const manufacturingCost = Math.ceil(partsCost * 1.10);
+        const sellPrice = parseFloat(document.getElementById('con-price').value) || 0;
         const profit = sellPrice - manufacturingCost;
 
         // Declared here so they're always available for the return statement
@@ -247,9 +236,6 @@ window.consoleArch = {
                     <li style="display:flex; justify-content:space-between;"><span>Console Power:</span> <b>${Math.floor(consolePerf)} T-Ops</b></li>
                     <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
                         <span>Mfg Cost:</span> <span style="color:#aaa">$${Math.floor(manufacturingCost)}</span>
-                    </li>
-                    <li style="display:flex; justify-content:space-between;">
-                        <span>Suggested Price:</span> <b>$${suggestedPrice}</b>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
                         <span>Net Profit:</span> <b style="color:${profitColor}">$${Math.floor(profit)}</b>

@@ -331,24 +331,13 @@ window.server = {
         if (isRedundant) uptime += (100 - uptime) * 0.9; // Redundancy covers 90% of failures
         if (topology.latency === 'High') uptime -= 0.1; // Bad network drops packets
 
-        // 5. FINANCIALS (CapEx + 3-Year OpEx)
+        // 5. FINANCIALS
         const nodePartsCost = 
             ((cpu?.raw.price||0) * cpuQty) + ((gpu?.raw.price||0) * gpuQty) + 
             ((ram?.raw.price||0) * ramQty) + ((sto?.raw.price||0) * stoQty) + 
             nicDef.cost + (isRedundant ? psuDef.cost * 2 : psuDef.cost);
             
-        const capExNodes = nodePartsCost * totalNodes;
-        const capExRack = (rackDef.cost + topology.costPerNode * nodesPerRack) * rackCount;
-        const capExCooling = (clusterRawWatts / 1000) * cooling.costPerKw; 
-        
-        const CapEx = capExNodes + capExRack + capExCooling;
-
-        // 3-Year Power Bill (Assuming $0.10 per kWh)
-        const annualHours = 8760;
-        const opEx3Year = (totalFacWatts / 1000) * 0.10 * annualHours * 3; 
-
-        const totalProjectCost = CapEx + opEx3Year;
-        const suggestedBid = Math.ceil(totalProjectCost * 1.15);
+        const totalProjectCost = Math.ceil((nodePartsCost * totalNodes) * 1.10);
         const profit = contract.budget - totalProjectCost;
 
         // 6. VALIDATION & RENDER
@@ -384,13 +373,7 @@ window.server = {
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Rack Density:</span> <b style="color:${heatColor}">${(rackHeat/1000).toFixed(1)} kW</b> <span style="font-size:0.7rem">(${thermalStatus})</span></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Facility Power:</span> <b>${(totalFacWatts/1000000).toFixed(2)} MW</b> <span style="font-size:0.7rem">(PUE ${cooling.pue})</span></li>
                 <li style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between;">
-                    <span>CapEx (Hardware):</span> <span style="color:#aaa">-$${(CapEx/1000000).toFixed(2)}M</span>
-                </li>
-                <li style="display:flex; justify-content:space-between;">
-                    <span>OpEx (3Yr Power):</span> <span style="color:#aaa">-$${(opEx3Year/1000000).toFixed(2)}M</span>
-                </li>
-                <li style="display:flex; justify-content:space-between;">
-                    <span>Suggested Bid:</span> <b>$${(suggestedBid/1000000).toFixed(2)}M</b>
+                    <span>Mfg Cost:</span> <span style="color:#aaa">-$${(totalProjectCost/1000000).toFixed(2)}M</span>
                 </li>
                 <li style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; font-size:0.9rem;">
                     <span>Net Profit:</span> <b style="color:${profit>0?'#00e676':'#ff1744'}">$${(profit/1000000).toFixed(2)}M</b>
@@ -401,7 +384,7 @@ window.server = {
         return { 
             valid: errors.length === 0, 
             profit, clusterTFLOPS, totalNodes, scaleFactor, nodeWatts: realNodeWatts,
-            totalProjectCost, suggestedBid,
+            totalProjectCost,
             parts: {cpu, gpu, ram, sto}, contract
         };
     },

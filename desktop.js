@@ -291,17 +291,10 @@ window.desktop = {
         }
 
         // 5. COST ANALYSIS
-        const partsCost = (cpu?.raw.price||0) + (mobo?.raw.price||0) + (ram?.raw.price||0) + (gpu?.raw.price||0) + (sto?.raw.price||0);
-        const infraCost = (chassis?.cost||0) + (psu?.cost||0) + (cooler?.cost||0);
-        const totalCost = partsCost + infraCost;
+        const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0) + (mobo?.raw.price||0);
+        const totalCost = Math.ceil(partsCost * 1.10);
         
-        const priceInput = document.getElementById('sys-price');
-        const manualPrice = parseFloat(priceInput.value);
-        const suggestedPrice = Math.ceil(totalCost * 1.25);
-        const sellPrice = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : suggestedPrice;
-        if ((!Number.isFinite(manualPrice) || manualPrice <= 0) && priceInput) {
-            priceInput.value = sellPrice;
-        }
+        const sellPrice = parseFloat(document.getElementById('sys-price').value) || 0;
         const profit = sellPrice - totalCost;
 
         // 6. RENDER STATS
@@ -316,10 +309,7 @@ window.desktop = {
                     <li style="display:flex; justify-content:space-between;"><span>Bottleneck:</span> <b style="color:${bottleneck>0?'#ffaa00':'#00ff88'}">${bottleneck.toFixed(1)}%</b></li>
                     <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                     <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
-                        <span>Bill of Materials:</span> <span style="color:#aaa">$${totalCost}</span>
-                    </li>
-                    <li style="display:flex; justify-content:space-between;">
-                        <span>Suggested Price:</span> <b>$${suggestedPrice}</b>
+                        <span>Mfg Cost:</span> <span style="color:#aaa">$${totalCost}</span>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
                         <span>Net Profit:</span> <b style="color:${profit>0?'#00ff88':'#ff4444'}">$${profit}</b>

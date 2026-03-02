@@ -419,16 +419,8 @@ window.smartphone = {
 
         // --- G. COST & PROFIT ---
         const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0) + (cam?.raw.price||0) + (disp?.raw.price||0);
-        const batCost = (batCap / 1000) * batTech.costPerAh;
-        
-        const totalCost = partsCost + batCost + chassis.cost + feat.cost + charge.cost + ramGen.cost + stoGen.cost + mfgCost + os.cost;
-        const priceInput = document.getElementById('phone-price');
-        const manualPrice = parseFloat(priceInput.value);
-        const suggestedPrice = Math.ceil(totalCost * 1.25);
-        const normalizedSellPrice = Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : suggestedPrice;
-        if ((!Number.isFinite(manualPrice) || manualPrice <= 0) && priceInput) {
-            priceInput.value = normalizedSellPrice;
-        }
+        const totalCost = Math.ceil(partsCost * 1.10);
+        const normalizedSellPrice = parseFloat(document.getElementById('phone-price').value) || 0;
         const profit = normalizedSellPrice - totalCost;
 
         // --- H. RENDER ---
@@ -453,10 +445,7 @@ window.smartphone = {
                         <span>Composite Score:</span> <b style="color:var(--accent)">${Math.floor(phoneScore)}</b>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
-                        <span>Bill of Materials:</span> <span style="color:#aaa">-$${Math.floor(totalCost)}</span>
-                    </li>
-                    <li style="display:flex; justify-content:space-between;">
-                        <span>Suggested Price:</span> <b>$${suggestedPrice}</b>
+                        <span>Mfg Cost:</span> <span style="color:#aaa">-$${Math.floor(totalCost)}</span>
                     </li>
                     <li style="border-top:1px dashed #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.9rem;">
                         <span>Net Profit:</span> <b style="color:${profit>0?'#00e676':'#ff1744'}">$${Math.floor(profit)}</b>
