@@ -217,12 +217,7 @@ window.consoleArch = {
 
         // --- C. COST & LOSS LEADER MATH ---
         const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0);
-        // SoC Discount: Fusing chips is cheaper than buying separate parts
-        const socCost = partsCost * 0.7; 
-        
-        const infraCost = (chassis?.cost||0) + (controller?.cost||0) + (cooler?.cost||0) + (psuWatts * 0.15);
-        const manufacturingCost = socCost + infraCost;
-        
+        const manufacturingCost = Math.ceil(partsCost * 1.10);
         const sellPrice = parseFloat(document.getElementById('con-price').value) || 0;
         const profit = sellPrice - manufacturingCost;
 
