@@ -291,8 +291,9 @@ window.desktop = {
         }
 
         // 5. COST ANALYSIS
-        const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0) + (mobo?.raw.price||0);
-        const totalCost = Math.ceil(partsCost * 1.10);
+        const partsCost = (cpu?.raw.price||0) + (mobo?.raw.price||0) + (ram?.raw.price||0) + (gpu?.raw.price||0) + (sto?.raw.price||0);
+        const infraCost = (chassis?.cost||0) + (psu?.cost||0) + (cooler?.cost||0);
+        const totalCost = partsCost + infraCost;
         
         const sellPrice = parseFloat(document.getElementById('sys-price').value) || 0;
         const profit = sellPrice - totalCost;
@@ -309,7 +310,7 @@ window.desktop = {
                     <li style="display:flex; justify-content:space-between;"><span>Bottleneck:</span> <b style="color:${bottleneck>0?'#ffaa00':'#00ff88'}">${bottleneck.toFixed(1)}%</b></li>
                     <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                     <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
-                        <span>Mfg Cost:</span> <span style="color:#aaa">$${totalCost}</span>
+                        <span>Bill of Materials:</span> <span style="color:#aaa">$${totalCost}</span>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
                         <span>Net Profit:</span> <b style="color:${profit>0?'#00ff88':'#ff4444'}">$${profit}</b>

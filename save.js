@@ -18,11 +18,6 @@ window.sys = {
     // --- 2. API ---
     saveDesign: function(type, specs) {
         const db = this.load();
-
-        // Normalize top-level retail price so inventory sorting/display is stable.
-        const normalizedPrice = Number.isFinite(Number(specs.price)) ? Number(specs.price) : 0;
-        specs.price = normalizedPrice;
-        if (specs.raw && !Number.isFinite(Number(specs.raw.price))) specs.raw.price = normalizedPrice;
         
         // Extract numeric score for sorting purposes
         let scoreVal = 0;
