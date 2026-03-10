@@ -27,7 +27,7 @@ window.storage = {
     },
 
     // --- 3. UI RENDERER ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
 
         // Default year
@@ -37,9 +37,9 @@ window.storage = {
             <div class="architect-container">
                 
                 <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    ${Object.keys(this.presets).map(k => 
-                        `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.storage.loadPreset('${k}')">${k}</button>`
-                    ).join('')}
+                    ${Object.keys(this.presets).map(k =>
+            `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.storage.loadPreset('${k}')">${k}</button>`
+        ).join('')}
                 </div>
 
                 <div class="panel">
@@ -173,18 +173,18 @@ window.storage = {
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.toggleInputs(); // Initial Toggle
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    toggleInputs: function() {
+    toggleInputs: function () {
         const type = document.getElementById('sto-type').value;
         const hddBox = document.getElementById('mech-box');
         const ssdBox = document.getElementById('flash-box');
 
-        if(type === 'HDD') {
+        if (type === 'HDD') {
             hddBox.style.display = 'block';
             ssdBox.style.display = 'none';
         } else {
@@ -194,12 +194,12 @@ window.storage = {
         this.updatePhysics();
     },
 
-    loadPreset: function(name) {
+    loadPreset: function (name) {
         const p = this.presets[name];
-        if(!p) return;
-        const set = (id, val) => { 
-            const el = document.getElementById(id); 
-            if(el) el.value = val; 
+        if (!p) return;
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
         };
 
         set('sto-name', name);
@@ -210,50 +210,67 @@ window.storage = {
         set('sto-cache', p.cache);
         set('sto-price', p.price);
 
-        if(p.type === 'HDD') set('sto-rpm', p.rpm);
-        if(p.type === 'SSD') set('sto-cell', p.cell);
+        if (p.type === 'HDD') set('sto-rpm', p.rpm);
+        if (p.type === 'SSD') set('sto-cell', p.cell);
+
+        this.toggleInputs();
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        set('sto-name', raw.name);
+        set('sto-type', raw.type);
+        set('sto-inter', raw.inter);
+        set('sto-cap', raw.cap);
+        set('sto-speed', raw.speed);
+        set('sto-cache', raw.cache);
+        set('sto-price', raw.price);
+        set('sto-year', raw.year);
+
+        if (raw.type === 'HDD') set('sto-rpm', raw.rpm);
+        if (raw.type === 'SSD') set('sto-cell', raw.cell);
 
         this.toggleInputs();
     },
 
     // --- 4. PHYSICS ENGINE ---
-    updatePhysics: function() {
+    updatePhysics: function () {
         const d = this.scrapeData();
-        
+
         // 1. INTERFACE BOTTLENECK
         // Example: Plugging a 5000MB/s SSD into a SATA (600MB/s) port.
         const maxInterfaceSpeed = this.interfaces[d.inter] || 999999;
         let realSpeed = Math.min(d.speed, maxInterfaceSpeed);
-        
+
         let bottleneck = false;
         if (d.speed > maxInterfaceSpeed) bottleneck = true;
 
         // 2. SEEK TIME (Latency)
         let seekTime = 0;
-        let iops = 0; 
+        let iops = 0;
 
         if (d.type === 'HDD') {
             const rpm = parseInt(document.getElementById('sto-rpm').value);
             // Physics: Higher RPM = Lower Latency
-            seekTime = (60000 / rpm) / 2 + 2; 
-            iops = (rpm / 60) * 1.5; 
-            
+            seekTime = (60000 / rpm) / 2 + 2;
+            iops = (rpm / 60) * 1.5;
+
             const noiseEl = document.getElementById('sto-noise');
-            if(noiseEl) noiseEl.value = rpm > 7200 ? "Loud Whine" : "Humming";
+            if (noiseEl) noiseEl.value = rpm > 7200 ? "Loud Whine" : "Humming";
         } else {
             // SSD Physics
             seekTime = 0.05; // 50 microseconds
             iops = (realSpeed * 10) + (d.cache * 5);
-            
+
             const cell = document.getElementById('sto-cell').value;
             const lifeMap = { 'SLC': 'Unlimited', 'MLC': 'Very High', 'TLC': 'Good', 'QLC': 'Low', 'DNA': 'Eternal' };
             const lifeEl = document.getElementById('sto-life');
-            if(lifeEl) lifeEl.value = lifeMap[cell] || 'Average';
+            if (lifeEl) lifeEl.value = lifeMap[cell] || 'Average';
         }
 
         // 3. GAME LOADING SCORE
         let loadScore = (realSpeed * 0.5) + (iops * 0.1);
-        if (d.type === 'HDD') loadScore /= 10; 
+        if (d.type === 'HDD') loadScore /= 10;
 
         // 4. PRICE EFFICIENCY
         const pricePerGB = d.price / d.cap;
@@ -278,7 +295,7 @@ window.storage = {
         return { realSpeed, loadScore, bottleneck, capacity: d.cap };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         const get = (id) => {
             const el = document.getElementById(id);
             if (!el) return 0;
@@ -294,19 +311,21 @@ window.storage = {
             speed: get('sto-speed'),
             cache: get('sto-cache'),
             price: get('sto-price'),
-            year: get('sto-year')
+            year: get('sto-year'),
+            rpm: get('sto-rpm'),
+            cell: document.getElementById('sto-cell') ? document.getElementById('sto-cell').value : 'TLC'
         };
     },
 
     // --- 5. DATABASE & SAVE LOGIC ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-storage-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const activeStorage = db.inventory.filter(i => i.type === 'Storage' && i.active === true);
 
-        if(activeStorage.length === 0) {
+        if (activeStorage.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active Storage Drives.</div>`;
             return;
         }
@@ -321,30 +340,36 @@ window.storage = {
                     <div style="margin-top:2px; color:#fff;">$${drive.raw?.price || 0}</div>
                 </div>
                 
-                <button onclick="window.sys.discontinue(${drive.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${drive.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${drive.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
-        if(!window.sys || !window.sys.saveDesign) {
+    saveSystem: function () {
+        if (!window.sys || !window.sys.saveDesign) {
             alert("Error: Save system not found!");
             return;
         }
 
         const data = this.scrapeData();
         const results = this.updatePhysics();
-        
+
         // Format Capacity Label
-        const capLabel = data.cap >= 1000 ? (data.cap/1000).toFixed(1) + " TB" : data.cap + " GB";
+        const capLabel = data.cap >= 1000 ? (data.cap / 1000).toFixed(1) + " TB" : data.cap + " GB";
 
         window.sys.saveDesign('Storage', {
             name: data.name,
-            
+
             // Display Specs
             specs: {
                 "Type": `${data.type} (${data.inter})`,
@@ -353,7 +378,7 @@ window.storage = {
                 "Bottleneck": results.bottleneck ? "YES" : "NO",
                 "Score": Math.floor(results.loadScore)
             },
-            
+
             // Raw Data
             price: data.price,
             year: data.year,

@@ -4,7 +4,7 @@
  */
 
 window.gpu = {
-    
+
     // --- 1. PRESETS ---
     presets: {
         'Entry 1080p': { sh: 1280, clk: 1.8, ipc: 1.0, node: 7, vram: 4, bus: 96, mclk: 12000, tmus: 64, rops: 32, rt: 0, ten: 0, cool: 100, tdp: 120, volt: 0.9, price: 199 },
@@ -14,7 +14,7 @@ window.gpu = {
     },
 
     // --- 2. UI RENDERER ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
 
         // Default year
@@ -24,9 +24,9 @@ window.gpu = {
             <div class="architect-container">
                 
                 <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    ${Object.keys(this.presets).map(k => 
-                        `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.gpu.loadPreset('${k}')">${k}</button>`
-                    ).join('')}
+                    ${Object.keys(this.presets).map(k =>
+            `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.gpu.loadPreset('${k}')">${k}</button>`
+        ).join('')}
                 </div>
 
                 <div class="panel">
@@ -162,16 +162,16 @@ window.gpu = {
         container.querySelectorAll('input').forEach(el => {
             el.addEventListener('input', () => this.updatePreview());
         });
-        
+
         this.updatePreview();
         this.refreshLineup();
     },
 
-    loadPreset: function(name) {
+    loadPreset: function (name) {
         const p = this.presets[name];
-        if(!p) return;
-        
-        const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+        if (!p) return;
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
 
         set('gpu-name', name + " Edition");
         set('gpu-shaders', p.sh); set('gpu-clock', p.clk); set('gpu-ipc', p.ipc);
@@ -180,66 +180,89 @@ window.gpu = {
         set('gpu-rt', p.rt); set('gpu-tensor', p.ten);
         set('gpu-cool', p.cool); set('gpu-tdp', p.tdp); set('gpu-volt', p.volt);
         set('gpu-price', p.price);
-        
+
+        this.updatePreview();
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        set('gpu-name', raw.name);
+        set('gpu-node', raw.node);
+        set('gpu-price', raw.price);
+        set('gpu-year', raw.year);
+        set('gpu-shaders', raw.sh);
+        set('gpu-clock', raw.clk);
+        set('gpu-ipc', raw.ipc);
+        set('gpu-volt', raw.volt);
+        set('gpu-vram', raw.vram);
+        set('gpu-bus', raw.bus);
+        set('gpu-mclk', raw.mclk);
+        set('gpu-tmus', raw.tmus);
+        set('gpu-rops', raw.rops);
+        set('gpu-rt', raw.rt);
+        set('gpu-tensor', raw.ten);
+        set('gpu-cool', raw.cool);
+        set('gpu-tdp', raw.tdp);
+
         this.updatePreview();
     },
 
     // --- 3. PHYSICS ENGINE V3 ---
-    updatePreview: function() {
+    updatePreview: function () {
         const d = this.scrapeData();
-        
+
         // --- A. MEMORY BOTTLENECK ---
         // Formula: (Bus Width * Memory Clock) / 8 bits = MB/s -> /1000 = GB/s
-        const bandwidth = (d.bus * d.mclk) / 8000; 
-        
+        const bandwidth = (d.bus * d.mclk) / 8000;
+
         // Core Compute Potential (Raw TFLOPS * IPC)
         // FIXED: Don't floor this at 1.0, or small GPUs break the ratio
         const rawCompute = (d.sh * d.clk * 2 * d.ipc) / 1000;
         const safeCompute = rawCompute > 0 ? rawCompute : 0.0001; // Avoid divide by zero
-        
+
         // Feed Ratio: GB/s per TFLOP. 
         // Modern GPUs (RTX 4090) are around 12.0 ratio. Older were 30+.
         // ADJUSTED: Threshold lowered from 20 to 12 to reflect modern efficiency.
         const feedRatio = bandwidth / safeCompute;
         let memPenalty = 1.0;
-        
+
         if (feedRatio < 12) {
             // Smoother curve, less punishing immediately
-            memPenalty = Math.max(0.6, feedRatio / 12); 
+            memPenalty = Math.max(0.6, feedRatio / 12);
         }
 
         // --- B. VRAM PENALTY ---
         // If VRAM is too low for the Compute Power, punish performance.
         let vramPenalty = 1.0;
         const requiredVram = rawCompute > 20 ? 12 : (rawCompute > 10 ? 8 : 4);
-        
+
         if (d.vram < requiredVram) {
             vramPenalty = 1.0 - ((requiredVram - d.vram) * 0.05);
             vramPenalty = Math.max(0.5, vramPenalty);
         }
 
         // --- C. POWER & THERMALS ---
-        const effFactor = Math.sqrt(14 / d.node); 
-        
+        const effFactor = Math.sqrt(14 / d.node);
+
         // Base Power Components
         const corePwr = (d.sh * d.clk * Math.pow(d.volt, 2) * 0.004) / effFactor;
-        const memPwr = (d.vram * 0.5) + (bandwidth * 0.1); 
-        const socPwr = 25; 
-        
+        const memPwr = (d.vram * 0.5) + (bandwidth * 0.1);
+        const socPwr = 25;
+
         const totalPwr = corePwr + memPwr + socPwr;
-        
+
         // Thermal Curve
         const ambient = 30;
         const loadRatio = totalPwr / d.cool;
         let thermalDelta = 0;
 
         if (loadRatio <= 0.8) {
-            thermalDelta = loadRatio * 40; 
+            thermalDelta = loadRatio * 40;
         } else {
             // Exponential at high load
             thermalDelta = 40 + Math.pow((loadRatio - 0.8) * 5, 2) * 30;
         }
-        
+
         let temp = ambient + thermalDelta;
 
         // Throttling Logic
@@ -250,7 +273,7 @@ window.gpu = {
             throttle = d.tdp / totalPwr;
             statusColor = "#ffaa00"; // Warning Orange
         }
-        
+
         if (temp > 90) {
             const thermalThrottle = 90 / temp;
             if (thermalThrottle < throttle) {
@@ -263,15 +286,30 @@ window.gpu = {
         // --- D. FINAL SCORE ---
         const effectiveClock = d.clk * throttle;
         const tflops = (d.sh * effectiveClock * 2 * d.ipc) / 1000;
-        
+
+        // Calculate specialized GPU metrics
+        const ropc = d.sh / 64; // Base ROP scaling on shaders
+        const tmu = d.sh / 16;  // Base TMU scaling on shaders
+
+        const pixelOps = ropc * effectiveClock; // GPixel/s
+        const texOps = tmu * effectiveClock;    // GTexel/s
+
+        // Ray tracing based on year and generation
+        const rtBonus = d.year >= 2018 ? (d.year - 2017) * 0.5 : 0;
+        const rtOps = (d.rt || (d.sh * 0.05)) * effectiveClock * rtBonus; // GRays/s
+
+        // AI / Tensor ops
+        const aiBonus = d.year >= 2017 ? (d.year - 2016) * 1.5 : 0.1;
+        const tensorOps = (d.ten || (d.sh * 0.1)) * effectiveClock * aiBonus; // TOPS
+
         // Gaming Score: TFLOPS + Fill Rates + Penalties
         const pixelFill = d.rops * effectiveClock;
         const texFill = d.tmus * effectiveClock;
-        
+
         let score = (tflops * 100) + (pixelFill * 0.5) + (texFill * 0.2);
         score *= memPenalty;
         score *= vramPenalty;
-        
+
         score = Math.floor(score);
 
         // UI Updates
@@ -281,17 +319,19 @@ window.gpu = {
 
             display.innerHTML = `
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Performance:</span> <b style="color:var(--accent)">${tflops.toFixed(2)} TFLOPS</b></li>
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth:</span> <b>${bandwidth.toFixed(0)} GB/s</b> <span style="font-size:0.7em; color:${memPenalty<0.9?'#f55':'#888'}">${memStatus}</span></li>
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Power Draw:</span> <b>${(totalPwr * throttle).toFixed(0)}W</b> <span style="font-size:0.7em">/ ${d.tdp}W TDP</span></li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth:</span> <b>${window.sys ? window.sys.formatUnits(bandwidth, 'GB/s') : bandwidth.toFixed(0) + ' GB/s'}</b> <span style="font-size:0.7em; color:${memPenalty < 0.9 ? '#f55' : '#888'}">${memStatus}</span></li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Power Draw:</span> <b>${(totalPwr * throttle).toFixed(0)}W</b> <span style="font-size:0.7em">/ ${window.sys ? window.sys.formatUnits(d.tdp, 'W') : d.tdp + ' W'} TDP</span></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Temp:</span> <b style="color:${statusColor}">${temp.toFixed(0)}°C</b></li>
+                <li style="border-top:1px solid #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.8em; color:#888;"><span>Pixel/Tex:</span> <span>${pixelOps.toFixed(1)} GPixel/s | ${texOps.toFixed(1)} GTexel/s</span></li>
+                <li style="display:flex; justify-content:space-between; font-size:0.8em; color:#888; margin-bottom:4px;"><span>RT/AI:</span> <span>${rtOps.toFixed(1)} GRays/s | ${tensorOps.toFixed(1)} TOPS</span></li>
                 <li style="display:flex; justify-content:space-between; border-top:1px solid #444; padding-top:4px;"><span>Gaming Score:</span> <b style="color:var(--accent)">${score}</b></li>
             `;
         }
-        
-        return { score, tflops, temp, bandwidth };
+
+        return { score, tflops, temp, bandwidth, pixelOps, texOps, rtOps, tensorOps };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         const get = (id) => {
             const el = document.getElementById(id);
             return el ? (parseFloat(el.value) || 0) : 0;
@@ -318,14 +358,14 @@ window.gpu = {
     },
 
     // --- 4. DATABASE & SAVE LOGIC ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-gpu-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const activeGPUs = db.inventory.filter(i => i.type === 'GPU' && i.active === true);
 
-        if(activeGPUs.length === 0) {
+        if (activeGPUs.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active GPUs.</div>`;
             return;
         }
@@ -340,17 +380,23 @@ window.gpu = {
                     <div style="margin-top:2px; color:#fff;">$${gpu.raw?.price || 0}</div>
                 </div>
                 
-                <button onclick="window.sys.discontinue(${gpu.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${gpu.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${gpu.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
-        if(!window.sys || !window.sys.saveDesign) {
+    saveSystem: function () {
+        if (!window.sys || !window.sys.saveDesign) {
             alert("Error: Save system not found!");
             return;
         }
@@ -360,17 +406,25 @@ window.gpu = {
 
         window.sys.saveDesign('GPU', {
             name: data.name,
-            
+
             // Display Specs
             specs: {
                 "VRAM": `${data.vram}GB ${data.bus}-bit`,
                 "Clock": `${data.clk} GHz`,
                 "Config": `${data.sh} Cores`,
-                "TDP": `${data.tdp}W`,
+                "TDP": window.sys ? window.sys.formatUnits(data.tdp, 'W') : `${data.tdp} W`,
                 "Perf": `${results.tflops.toFixed(1)} TFLOPS`,
                 "Score": results.score
             },
-            
+
+            // Stats
+            benchmarks: {
+                pixelOps: results.pixelOps,
+                texOps: results.texOps,
+                rtOps: results.rtOps,
+                tensorOps: results.tensorOps
+            },
+
             // Raw Data
             price: data.price,
             year: data.year,

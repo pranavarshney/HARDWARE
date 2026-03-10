@@ -32,7 +32,7 @@ window.desktop = {
     },
 
     // --- 2. RENDER UI ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
         const currentYear = new Date().getFullYear();
 
@@ -139,44 +139,50 @@ window.desktop = {
         `;
 
         this.populatePartDropdowns();
-        
+
         // Bind Events
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('change', () => this.updatePhysics());
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
     // --- HELPER: Render Simple Options ---
-    renderOptions: function(obj) {
+    renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
     },
 
     // --- 3. INVENTORY LINKING ---
-    populatePartDropdowns: function() {
-        if(!window.sys) return;
+    populatePartDropdowns: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         // Helper to fill a specific dropdown
         const fill = (id, type) => {
             const el = document.getElementById(id);
-            if(!el) return;
-            
-            // Get parts of this type
+            if (!el) return;
+
+            // Get all parts of this type (including inactive)
             const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
-            
-            if(parts.length === 0) {
+
+            if (parts.length === 0) {
                 el.innerHTML = `<option value="">No ${type}s Found</option>`;
             } else {
-                // Add an "None" option for optional parts like GPU? No, desktop needs gpu usually, but let's assume iGPU exists if none selected
-                // actually let's just list them.
-                el.innerHTML = parts.map(p => `<option value="${p.id}">${p.name} ($${p.raw?.price || 0})</option>`).join('');
-                
-                // Select the newest one by default
-                el.value = parts[parts.length-1].id; 
+                el.innerHTML = parts.map(p => {
+                    const status = p.active ? "" : " (Archived)";
+                    return `<option value="${p.id}">${p.name}${status} ($${p.raw?.price || 0})</option>`;
+                }).join('');
+
+                // Select the newest active one by default if possible
+                const activeParts = parts.filter(p => p.active);
+                if (activeParts.length > 0) {
+                    el.value = activeParts[activeParts.length - 1].id;
+                } else {
+                    el.value = parts[parts.length - 1].id;
+                }
             }
         };
 
@@ -188,14 +194,14 @@ window.desktop = {
     },
 
     // --- 4. PHYSICS & COMPATIBILITY ENGINE ---
-    updatePhysics: function() {
-        if(!window.sys) return;
+    updatePhysics: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         // 1. FETCH SELECTED PARTS
         const getPart = (id) => {
             const val = document.getElementById(id).value;
-            if(!val) return null;
+            if (!val) return null;
             return db.inventory.find(i => i.id == val);
         };
 
@@ -212,27 +218,27 @@ window.desktop = {
 
         // 2. COMPATIBILITY CHECKS
         let errors = [];
-        
+
         // Socket Check
-        if(cpu && mobo) {
-            if(cpu.raw.socket !== mobo.raw.socket) errors.push(`Socket Mismatch: CPU (${cpu.raw.socket}) vs Mobo (${mobo.raw.socket})`);
+        if (cpu && mobo) {
+            if (cpu.raw.socket !== mobo.raw.socket) errors.push(`Socket Mismatch: CPU (${cpu.raw.socket}) vs Mobo (${mobo.raw.socket})`);
         }
-        
+
         // RAM Generation Check
-        if(ram && mobo) {
+        if (ram && mobo) {
             // mobo.raw.ram might be "DDR5", ram.raw.gen might be "DDR5"
             // We need to handle potential naming diffs, but assuming consistency based on previous files
-            if(mobo.raw.ram !== ram.raw.gen) errors.push(`RAM Incompatible: Mobo needs ${mobo.raw.ram}, got ${ram.raw.gen}`);
+            if (mobo.raw.ram !== ram.raw.gen) errors.push(`RAM Incompatible: Mobo needs ${mobo.raw.ram}, got ${ram.raw.gen}`);
         }
 
         // Form Factor Check
-        if(mobo) {
+        if (mobo) {
             // Simple size hierarchy: ITX < mATX < ATX < E-ATX
             const sizes = { 'ITX': 1, 'mATX': 2, 'ATX': 3, 'E-ATX': 4 };
             const caseSize = sizes[chassis.type] || 0;
             const moboSize = sizes[mobo.raw.form] || 0;
-            
-            if(moboSize > caseSize) errors.push(`Fit Issue: ${mobo.raw.form} mobo won't fit in ${chassis.type} case`);
+
+            if (moboSize > caseSize) errors.push(`Fit Issue: ${mobo.raw.form} mobo won't fit in ${chassis.type} case`);
         }
 
         // 3. POWER & THERMALS
@@ -240,18 +246,18 @@ window.desktop = {
         const cpuTDP = cpu ? (cpu.raw.tdp || 65) : 0;
         const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0; // GPU might not have tdp in raw if old version, assume safe default
         const sysOverhead = 50; // Fans, drives, mobo
-        
+
         const totalWatts = cpuTDP + gpuTDP + sysOverhead;
         const psuWatts = psu ? psu.watts : 0;
-        
+
         let powerStatus = "Good";
         let powerColor = "var(--accent-success)";
-        
-        if(totalWatts > psuWatts) {
+
+        if (totalWatts > psuWatts) {
             errors.push(`Power Failure: Needs ${totalWatts}W, PSU is ${psuWatts}W`);
             powerStatus = "CRITICAL FAILURE";
             powerColor = "#ff4444";
-        } else if(totalWatts > psuWatts * 0.9) {
+        } else if (totalWatts > psuWatts * 0.9) {
             powerStatus = "Strained (>90%)";
             powerColor = "#ffaa00";
         }
@@ -260,9 +266,9 @@ window.desktop = {
         const totalHeat = cpuTDP; // GPU usually cools itself, case airflow helps both
         // Cooler TDP is for CPU.
         const coolingCap = (cooler ? cooler.tdp : 0) + (chassis ? chassis.airflow * 10 : 0);
-        
+
         let thermalStatus = "Cool";
-        if(cpuTDP > coolingCap) {
+        if (cpuTDP > coolingCap) {
             thermalStatus = "CPU Throttling";
             errors.push("Thermal Throttle: CPU Cooler insufficient");
         }
@@ -270,59 +276,58 @@ window.desktop = {
         // 4. PERFORMANCE & BOTTLENECK
         let cpuScore = cpu ? (cpu.raw.benchmarks?.multiScore || 0) : 0;
         let gpuScore = gpu ? (gpu.raw.benchmarks?.score || 0) : 0;
-        
+
         // Simple Bottleneck Logic
         // If GPU score is huge but CPU score is tiny, throttle GPU.
         let bottleneck = 0;
         let effectivePerf = 0;
 
-        if(gpuScore > 0 && cpuScore > 0) {
+        if (gpuScore > 0 && cpuScore > 0) {
             // Ratio. A balanced gaming PC might have GPU score ~ 1.5x CPU score (arbitrary game scale)
             // If GPU is 5x CPU, CPU is bottleneck.
             const ratio = gpuScore / cpuScore;
-            
-            if(ratio > 3.0) {
+
+            if (ratio > 3.0) {
                 bottleneck = (ratio - 3.0) * 10; // % penalty
-                if(bottleneck > 50) bottleneck = 50;
-                effectivePerf = (cpuScore * 3) + (gpuScore * (1 - (bottleneck/100)));
+                if (bottleneck > 50) bottleneck = 50;
+                effectivePerf = (cpuScore * 3) + (gpuScore * (1 - (bottleneck / 100)));
             } else {
                 effectivePerf = cpuScore + gpuScore;
             }
         }
 
         // 5. COST ANALYSIS
-        const partsCost = (cpu?.raw.price||0) + (mobo?.raw.price||0) + (ram?.raw.price||0) + (gpu?.raw.price||0) + (sto?.raw.price||0);
-        const infraCost = (chassis?.cost||0) + (psu?.cost||0) + (cooler?.cost||0);
-        const totalCost = partsCost + infraCost;
-        
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + (mobo?.raw.price || 0);
+        const totalCost = Math.ceil(partsCost * 1.10);
+
         const sellPrice = parseFloat(document.getElementById('sys-price').value) || 0;
         const profit = sellPrice - totalCost;
 
         // 6. RENDER STATS
         const display = document.getElementById('sys-live-stats');
-        if(display) {
-            if(errors.length > 0) {
+        if (display) {
+            if (errors.length > 0) {
                 display.innerHTML = errors.map(e => `<li style="color:#ff4444">❌ ${e}</li>`).join('');
             } else {
                 display.innerHTML = `
                     <li style="display:flex; justify-content:space-between;"><span>Total Power:</span> <b>${totalWatts}W / ${psuWatts}W</b></li>
                     <li style="display:flex; justify-content:space-between;"><span>Thermal Headroom:</span> <b>${(coolingCap - cpuTDP)}W</b></li>
-                    <li style="display:flex; justify-content:space-between;"><span>Bottleneck:</span> <b style="color:${bottleneck>0?'#ffaa00':'#00ff88'}">${bottleneck.toFixed(1)}%</b></li>
+                    <li style="display:flex; justify-content:space-between;"><span>Bottleneck:</span> <b style="color:${bottleneck > 0 ? '#ffaa00' : '#00ff88'}">${bottleneck.toFixed(1)}%</b></li>
                     <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                     <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
-                        <span>Bill of Materials:</span> <span style="color:#aaa">$${totalCost}</span>
+                        <span>Mfg Cost:</span> <span style="color:#aaa">$${totalCost}</span>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
-                        <span>Net Profit:</span> <b style="color:${profit>0?'#00ff88':'#ff4444'}">$${profit}</b>
+                        <span>Net Profit:</span> <b style="color:${profit > 0 ? '#00ff88' : '#ff4444'}">$${profit}</b>
                     </li>
                 `;
             }
         }
 
-        return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: {cpu, mobo, ram, gpu, sto, chassis, psu, cooler} };
+        return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: { cpu, mobo, ram, gpu, sto, chassis, psu, cooler } };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         return {
             name: document.getElementById('sys-name').value,
             year: parseFloat(document.getElementById('sys-year').value),
@@ -331,14 +336,14 @@ window.desktop = {
     },
 
     // --- 5. SAVE & LAUNCH ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-desktop-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const active = db.inventory.filter(i => i.type === 'Desktop' && i.active === true);
 
-        if(active.length === 0) {
+        if (active.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active Desktops.</div>`;
             return;
         }
@@ -356,20 +361,26 @@ window.desktop = {
                         <span style="color:${specs.Profit > 0 ? '#00ff88' : '#f55'}">Profit: $${specs.Profit}</span>
                     </div>
                 </div>
-                <button onclick="window.sys.discontinue(${pc.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${pc.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${pc.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
+    saveSystem: function () {
         const physics = this.updatePhysics();
         const meta = this.scrapeData();
 
-        if(!physics.valid) {
+        if (!physics.valid) {
             alert("CANNOT LAUNCH: " + physics.errors[0]);
             return;
         }

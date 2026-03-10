@@ -27,7 +27,7 @@ window.consoleArch = {
     },
 
     // --- 2. RENDER UI ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
         const currentYear = new Date().getFullYear();
 
@@ -67,6 +67,10 @@ window.consoleArch = {
                             <label>GPU Graphics</label>
                             <select id="con-gpu" class="part-selector"></select>
                         </div>
+                    </div>
+                    <div class="input-group" style="margin-top:10px;">
+                        <label>Motherboard</label>
+                        <select id="con-mobo" class="part-selector"></select>
                     </div>
                     <div class="input-group" style="margin-top:10px;">
                         <label>Shared Memory (GDDR)</label>
@@ -136,55 +140,68 @@ window.consoleArch = {
         `;
 
         this.populatePartDropdowns();
-        
+
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('change', () => this.updatePhysics());
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    renderOptions: function(obj) {
+    renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
     },
 
     // --- 3. INVENTORY LINKING ---
-    populatePartDropdowns: function() {
-        if(!window.sys) return;
+    populatePartDropdowns: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         const fill = (id, type) => {
             const el = document.getElementById(id);
-            if(!el) return;
+            if (!el) return;
             const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
-            if(parts.length === 0) {
+            if (parts.length === 0) {
                 el.innerHTML = `<option value="">No ${type}s Found</option>`;
             } else {
-                el.innerHTML = parts.map(p => `<option value="${p.id}">${p.name} ($${p.raw?.price || 0})</option>`).join('');
-                el.value = parts[parts.length-1].id; 
+                el.innerHTML = parts.map(p => {
+                    const status = p.active ? "" : " (Archived)";
+                    let extra = "";
+                    if (type === 'Motherboard') extra = ` | ${p.specs.Form}`;
+                    return `<option value="${p.id}">${p.name}${status}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
+                }).join('');
+
+                const activeParts = parts.filter(p => p.active);
+                if (activeParts.length > 0) {
+                    el.value = activeParts[activeParts.length - 1].id;
+                } else {
+                    el.value = parts[parts.length - 1].id;
+                }
             }
         };
 
         fill('con-cpu', 'CPU');
+        fill('con-mobo', 'Motherboard');
         fill('con-gpu', 'GPU');
         fill('con-ram', 'RAM'); // In consoles, this is usually Unified Memory
         fill('con-storage', 'Storage');
     },
 
     // --- 4. PHYSICS ENGINE ---
-    updatePhysics: function() {
-        if(!window.sys) return;
+    updatePhysics: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         const getPart = (id) => {
             const val = document.getElementById(id).value;
-            if(!val) return null;
+            if (!val) return null;
             return db.inventory.find(i => i.id == val);
         };
 
         const cpu = getPart('con-cpu');
+        const mobo = getPart('con-mobo');
         const gpu = getPart('con-gpu');
         const ram = getPart('con-ram');
         const sto = getPart('con-storage');
@@ -198,31 +215,29 @@ window.consoleArch = {
         // Consoles optimize power. We assume 80% of desktop TDP for the SoC integration.
         const cpuTDP = cpu ? (cpu.raw.tdp || 65) : 0;
         const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0;
-        
+
         const socTDP = (cpuTDP + gpuTDP) * 0.85; // Optimization bonus
         const totalWatts = socTDP + 30; // 30W for board, drive, wifi
 
         let errors = [];
-        
-        if(totalWatts > psuWatts) errors.push(`PSU Weak: Needs ${Math.floor(totalWatts)}W, has ${psuWatts}W`);
-        
-        if(socTDP > cooler.tdp) errors.push(`Overheating: SoC is ${Math.floor(socTDP)}W, Cooler is ${cooler.tdp}W`);
+
+        if (mobo && mobo.raw.form !== 'Console Board') errors.push("Motherboard must be a Console Board Form Factor!");
+
+        if (totalWatts > psuWatts) errors.push(`PSU Weak: Needs ${Math.floor(totalWatts)}W, has ${psuWatts}W`);
+
+        if (socTDP > cooler.tdp) errors.push(`Overheating: SoC is ${Math.floor(socTDP)}W, Cooler is ${cooler.tdp}W`);
 
         // --- B. PERFORMANCE SCORE ---
         let cpuScore = cpu ? (cpu.raw.benchmarks?.multiScore || 0) : 0;
         let gpuScore = gpu ? (gpu.raw.benchmarks?.score || 0) : 0;
-        
+
         // Console "Optimization Magic" (Consoles perform better than specs suggest)
         const consolePerf = (cpuScore * 0.4) + (gpuScore * 0.6);
 
         // --- C. COST & LOSS LEADER MATH ---
-        const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0);
-        // SoC Discount: Fusing chips is cheaper than buying separate parts
-        const socCost = partsCost * 0.7; 
-        
-        const infraCost = (chassis?.cost||0) + (controller?.cost||0) + (cooler?.cost||0) + (psuWatts * 0.15);
-        const manufacturingCost = socCost + infraCost;
-        
+        const moboCost = mobo ? (mobo.raw.price || 0) : 0;
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + moboCost;
+        const manufacturingCost = Math.ceil(partsCost * 1.10);
         const sellPrice = parseFloat(document.getElementById('con-price').value) || 0;
         const profit = sellPrice - manufacturingCost;
 
@@ -232,8 +247,8 @@ window.consoleArch = {
 
         // --- D. RENDER ---
         const display = document.getElementById('con-live-stats');
-        if(display) {
-            if(errors.length > 0) {
+        if (display) {
+            if (errors.length > 0) {
                 display.innerHTML = errors.map(e => `<li style="color:#ff4444">❌ ${e}</li>`).join('');
             } else {
                 display.innerHTML = `
@@ -250,10 +265,10 @@ window.consoleArch = {
             }
         }
 
-        return { valid: errors.length === 0, manufacturingCost, consolePerf, errors, parts: {cpu, gpu, ram, sto}, stratText, profit };
+        return { valid: errors.length === 0, manufacturingCost, consolePerf, errors, parts: { cpu, mobo, gpu, ram, sto }, stratText, profit };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         return {
             name: document.getElementById('con-name').value,
             year: parseFloat(document.getElementById('con-year').value),
@@ -262,14 +277,14 @@ window.consoleArch = {
     },
 
     // --- 5. SAVE ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-console-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const active = db.inventory.filter(i => i.type === 'Console' && i.active === true);
 
-        if(active.length === 0) {
+        if (active.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active Consoles.</div>`;
             return;
         }
@@ -287,20 +302,26 @@ window.consoleArch = {
                         <span style="color:${isLoss ? '#ffaa00' : '#00ff88'}">${isLoss ? 'Loss Leader' : 'Profitable'}</span>
                     </div>
                 </div>
-                <button onclick="window.sys.discontinue(${c.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${c.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${c.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
+    saveSystem: function () {
         const physics = this.updatePhysics();
         const meta = this.scrapeData();
 
-        if(!physics.valid) {
+        if (!physics.valid) {
             alert("CANNOT LAUNCH: " + physics.errors[0]);
             return;
         }

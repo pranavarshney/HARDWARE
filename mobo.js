@@ -15,7 +15,7 @@ window.mobo = {
     },
 
     // --- 2. UI RENDERER ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
 
         // Default year
@@ -25,9 +25,9 @@ window.mobo = {
             <div class="architect-container">
                 
                 <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    ${Object.keys(this.presets).map(k => 
-                        `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.mobo.loadPreset('${k}')">${k.split(' ')[0]}</button>`
-                    ).join('')}
+                    ${Object.keys(this.presets).map(k =>
+            `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.mobo.loadPreset('${k}')">${k.split(' ')[0]}</button>`
+        ).join('')}
                 </div>
 
                 <div class="panel">
@@ -86,6 +86,9 @@ window.mobo = {
                             <option value="mATX">Micro-ATX (4 Slots)</option>
                             <option value="ATX">Standard ATX (7 Slots)</option>
                             <option value="E-ATX" selected>E-ATX (Massive)</option>
+                            <option value="Laptop Board">Laptop Board</option>
+                            <option value="Console Board">Console Board</option>
+                            <option value="Mobile Board">Mobile Board</option>
                         </select>
                     </div>
                 </div>
@@ -158,16 +161,16 @@ window.mobo = {
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    loadPreset: function(name) {
+    loadPreset: function (name) {
         const p = this.presets[name];
-        if(!p) return;
-        
-        const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+        if (!p) return;
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
 
         set('mobo-name', name);
         set('mobo-socket', p.socket);
@@ -179,12 +182,29 @@ window.mobo = {
         set('mobo-layers', p.layers || 6); // Default to 6 if missing in preset
         set('mobo-cool', p.cool);
         set('mobo-price', p.price);
-        
+
+        this.updatePhysics();
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        set('mobo-name', raw.name);
+        set('mobo-socket', raw.socket);
+        set('mobo-chip', raw.chip);
+        set('mobo-form', raw.form);
+        set('mobo-ram', raw.ram);
+        set('mobo-pcie', raw.pcie);
+        set('mobo-phases', raw.phases);
+        set('mobo-layers', raw.layers);
+        set('mobo-cool', raw.cool);
+        set('mobo-price', raw.price);
+        set('mobo-year', raw.year);
+
         this.updatePhysics();
     },
 
     // --- 3. PHYSICS ENGINE ---
-    updatePhysics: function() {
+    updatePhysics: function () {
         const d = this.scrapeData();
 
         // 1. VRM POWER CAPACITY CALCULATION
@@ -203,34 +223,34 @@ window.mobo = {
             'Active Fan': 1.5,
             'Waterblock': 2.0
         };
-        
+
         const maxTDP = Math.floor(rawPowerCap * (coolingMult[d.cool] || 1.0));
-        
+
         // 2. SIGNAL INTEGRITY
         let maxRamSpeed = 3200; // Base DDR4
-        if (d.ram === 'DDR5') maxRamSpeed = 4800 + (d.layers * 400); 
-        
+        if (d.ram === 'DDR5') maxRamSpeed = 4800 + (d.layers * 400);
+
         // 3. EXPANSION CAPACITY
         const slots = { 'ITX': 1, 'mATX': 2, 'ATX': 3, 'E-ATX': 4 }[d.form] || 3;
-        const m2Slots = Math.max(1, Math.floor(d.layers / 2)); 
+        const m2Slots = Math.max(1, Math.floor(d.layers / 2));
 
         // 4. VRM TEMP ESTIMATE
         const simLoad = 200; // Standard high-end CPU load
         const loadRatio = simLoad / maxTDP;
-        let vrmTemp = 40 + (loadRatio * 60); 
-        
+        let vrmTemp = 40 + (loadRatio * 60);
+
         let status = "Stable";
         let color = "#00ff88"; // Success Green
-        
-        if (vrmTemp > 90) { 
-            status = "VRM Thermal Throttle"; 
+
+        if (vrmTemp > 90) {
+            status = "VRM Thermal Throttle";
             color = "#ff4444"; // Danger Red
         } else if (vrmTemp > 75) {
             status = "Running Hot";
             color = "#ffaa00"; // Warning Orange
         } else if (loadRatio > 1.2) {
-             status = "VRM FAILURE";
-             color = "#ff4444";
+            status = "VRM FAILURE";
+            color = "#ff4444";
         }
 
         // 5. QUALITY SCORE
@@ -252,7 +272,7 @@ window.mobo = {
         return { score, maxTDP, vrmTemp, slots };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         const get = (id) => {
             const el = document.getElementById(id);
             if (!el) return 0;
@@ -276,14 +296,14 @@ window.mobo = {
     },
 
     // --- 4. DATABASE & SAVE LOGIC ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-mobo-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const activeMobos = db.inventory.filter(i => i.type === 'Motherboard' && i.active === true);
 
-        if(activeMobos.length === 0) {
+        if (activeMobos.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active Motherboards.</div>`;
             return;
         }
@@ -298,17 +318,23 @@ window.mobo = {
                     <div style="margin-top:2px; color:#fff;">$${board.raw?.price || 0}</div>
                 </div>
                 
-                <button onclick="window.sys.discontinue(${board.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${board.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${board.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
-        if(!window.sys || !window.sys.saveDesign) {
+    saveSystem: function () {
+        if (!window.sys || !window.sys.saveDesign) {
             alert("Error: Save system not found!");
             return;
         }
@@ -318,7 +344,7 @@ window.mobo = {
 
         window.sys.saveDesign('Motherboard', {
             name: data.name,
-            
+
             // Display Specs
             specs: {
                 "Socket": data.socket,
@@ -327,7 +353,7 @@ window.mobo = {
                 "VRM": `${data.phases} Phase (${data.cool})`,
                 "Score": Math.floor(results.score)
             },
-            
+
             // Raw Data
             price: data.price,
             year: data.year,

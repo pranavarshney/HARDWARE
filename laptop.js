@@ -14,12 +14,7 @@ window.laptop = {
         'Workstation Brick': { type: 'Huge', weight: 4.5, cooling: 250, cost: 200 }
     },
 
-    battery_opts: {
-        '30Wh (Basic)': { wh: 30, weight: 0.15, cost: 15 },
-        '50Wh (Standard)': { wh: 50, weight: 0.25, cost: 25 },
-        '80Wh (Long Life)': { wh: 80, weight: 0.40, cost: 50 },
-        '99Wh (Flight Max)': { wh: 99, weight: 0.50, cost: 75 }
-    },
+    // Battery is now a dynamic input, no longer preset options
 
     keyboard_opts: {
         'Membrane': { type: 'Basic', height: 0, cost: 5 },
@@ -29,7 +24,7 @@ window.laptop = {
     },
 
     // --- 2. RENDER UI ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
         const currentYear = new Date().getFullYear();
 
@@ -90,6 +85,10 @@ window.laptop = {
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
                         <div class="input-group">
+                            <label>Motherboard</label>
+                            <select id="lap-mobo" class="part-selector"></select>
+                        </div>
+                        <div class="input-group">
                             <label>Memory (RAM)</label>
                             <select id="lap-ram" class="part-selector"></select>
                         </div>
@@ -104,10 +103,8 @@ window.laptop = {
                     <h3>Power & Mobility</h3>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
-                            <label>Battery</label>
-                            <select id="lap-bat" onchange="window.laptop.updatePhysics()">
-                                ${this.renderOptions(this.battery_opts)}
-                            </select>
+                            <label>Battery Capacity (Wh)</label>
+                            <input type="number" id="lap-bat" value="50" min="20" max="150" onchange="window.laptop.updatePhysics()">
                         </div>
                         <div class="input-group">
                             <label>Charger (Watts)</label>
@@ -146,33 +143,35 @@ window.laptop = {
         `;
 
         this.populatePartDropdowns();
-        
+
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('change', () => this.updatePhysics());
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    renderOptions: function(obj) {
+    renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
     },
 
     // --- 3. INVENTORY LINKING ---
-    populatePartDropdowns: function() {
-        if(!window.sys) return;
+    populatePartDropdowns: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         const fill = (id, type) => {
             const el = document.getElementById(id);
-            if(!el) return;
+            if (!el) return;
+
+            // Get all parts of this type (including inactive)
             const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
-            
-            if(parts.length === 0) {
+
+            if (parts.length === 0) {
                 // Special handling for Optional GPU
-                if(type === 'GPU') {
+                if (type === 'GPU') {
                     el.innerHTML = `<option value="">Integrated Graphics (None)</option>`;
                 } else {
                     el.innerHTML = `<option value="">No ${type}s</option>`;
@@ -180,22 +179,31 @@ window.laptop = {
             } else {
                 let html = parts.map(p => {
                     let extra = "";
-                    if(type === 'Display') extra = ` | ${p.specs.Resolution} ${p.specs.HDR}`;
-                    return `<option value="${p.id}">${p.name}${extra}</option>`;
+                    if (type === 'Display') extra = ` | ${p.specs.Resolution} ${p.specs.HDR}`;
+                    if (type === 'Motherboard') extra = ` | ${p.specs.Form}`;
+                    const status = p.active ? "" : " (Archived)";
+                    return `<option value="${p.id}">${p.name}${status}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
                 }).join('');
-                
+
                 // For GPU, add an "Integrated" option at the top
-                if(type === 'GPU') {
+                if (type === 'GPU') {
                     html = `<option value="">Integrated Graphics Only</option>` + html;
                 }
-                
+
                 el.innerHTML = html;
-                // Default select the last one (usually newest)
-                el.value = parts[parts.length-1].id; 
+
+                // Default select the newest active
+                const activeParts = parts.filter(p => p.active);
+                if (activeParts.length > 0) {
+                    el.value = activeParts[activeParts.length - 1].id;
+                } else {
+                    el.value = parts[parts.length - 1].id;
+                }
             }
         };
 
         fill('lap-cpu', 'CPU');
+        fill('lap-mobo', 'Motherboard');
         fill('lap-gpu', 'GPU');
         fill('lap-ram', 'RAM');
         fill('lap-storage', 'Storage');
@@ -204,18 +212,19 @@ window.laptop = {
     },
 
     // --- 4. PHYSICS ENGINE ---
-    updatePhysics: function() {
-        if(!window.sys) return;
+    updatePhysics: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         const getPart = (id) => {
             const val = document.getElementById(id).value;
-            if(!val) return null;
+            if (!val) return null;
             return db.inventory.find(i => i.id == val);
         };
 
         // Get Components
         const cpu = getPart('lap-cpu');
+        const mobo = getPart('lap-mobo');
         const gpu = getPart('lap-gpu');
         const ram = getPart('lap-ram');
         const sto = getPart('lap-storage');
@@ -225,38 +234,38 @@ window.laptop = {
         // Get Chassis & Power
         const chassisKey = document.getElementById('lap-chassis').value;
         const chassis = this.chassis_opts[chassisKey];
-        
-        const batKey = document.getElementById('lap-bat').value;
-        const battery = this.battery_opts[batKey];
-        
+
+        const batCapacity = parseFloat(document.getElementById('lap-bat').value) || 50;
+        const battery = { wh: batCapacity, weight: batCapacity * 0.005, cost: batCapacity * 0.5 };
+
         const keyKey = document.getElementById('lap-key').value;
         const keyboard = this.keyboard_opts[keyKey];
-        
+
         const chargerWatts = parseFloat(document.getElementById('lap-charger').value) || 45;
 
         // --- A. POWER CONSUMPTION & THERMALS ---
         const cpuTDP = cpu ? (cpu.raw.tdp || 45) : 15;
         const gpuTDP = gpu ? (gpu.raw.tdp || 50) : 0;
-        
+
         // Laptop Thermal Reality:
         // A "Thick" gaming chassis can dissipate ~180W. An "Ultrabook" only ~28W.
         // If CPU+GPU > Cooling, we throttle.
         const totalHeat = cpuTDP + gpuTDP;
         const coolingCap = chassis.cooling;
-        
+
         let throttle = 1.0;
         let thermalStatus = "Optimal";
-        
+
         if (totalHeat > coolingCap) {
             throttle = coolingCap / totalHeat;
-            thermalStatus = `Throttling (-${((1-throttle)*100).toFixed(0)}%)`;
+            thermalStatus = `Throttling (-${((1 - throttle) * 100).toFixed(0)}%)`;
         }
 
         // --- B. BATTERY LIFE ---
         // Usage Scenario: Mixed Productivity (CPU low, GPU off, Screen 50%)
         // Display Power:
         let dispPwr = 2.0; // Base panel power
-        if(disp) {
+        if (disp) {
             const area = (disp.raw.w * disp.raw.h) / 2000000;
             // High refresh rate eats battery
             const hzFactor = disp.raw.hz / 60;
@@ -267,64 +276,64 @@ window.laptop = {
         const cpuIdle = cpuTDP * 0.15; // Modern CPUs idle well
         const sysOverhead = 3.0; // WiFi, RAM, NVMe
         const avgLoad = cpuIdle + dispPwr + sysOverhead;
-        
+
         // Gaming Load Power (for Charger check)
-        const peakLoad = (totalHeat * throttle) + dispPwr + sysOverhead + 10; 
+        const peakLoad = (totalHeat * throttle) + dispPwr + sysOverhead + 10;
 
         // Life Calculation
         const batteryLife = battery.wh / avgLoad;
 
         // Charger Check
         let chargeStatus = "Good";
-        if(peakLoad > chargerWatts) chargeStatus = "Drains under load";
+        if (peakLoad > chargerWatts) chargeStatus = "Drains under load";
 
         // --- C. PORTABILITY & WEIGHT ---
         // Base weight + Parts
         let totalWeight = chassis.weight + battery.weight;
-        if(gpu) totalWeight += 0.2; // Dedicated GPU adds cooling weight
-        if(chassis.type === 'Thick') totalWeight += 0.3; // Heatsinks
+        if (gpu) totalWeight += 0.2; // Dedicated GPU adds cooling weight
+        if (chassis.type === 'Thick') totalWeight += 0.3; // Heatsinks
 
         // --- D. PERFORMANCE SCORE ---
         let cpuScore = cpu ? (cpu.raw.benchmarks?.multiScore || 0) : 0;
         let gpuScore = gpu ? (gpu.raw.benchmarks?.score || 0) : 0;
-        
+
         const effectivePerf = (cpuScore + gpuScore) * throttle;
 
         // --- E. COST & PROFIT ---
-        const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0) + (disp?.raw.price||0) + (cam?.raw.price||0);
-        const infraCost = chassis.cost + battery.cost + keyboard.cost + (chargerWatts * 0.5);
-        
-        const totalCost = partsCost + infraCost;
+        const moboCost = mobo ? (mobo.raw.price || 0) : 0;
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + (cam?.raw.price || 0) + (disp?.raw.price || 0) + moboCost + battery.cost + chassis.cost;
+        const totalCost = Math.ceil(partsCost * 1.10);
         const sellPrice = parseFloat(document.getElementById('lap-price').value) || 0;
         const profit = sellPrice - totalCost;
 
         // --- F. RENDER ---
         const display = document.getElementById('lap-live-stats');
-        if(display) {
+        if (display) {
             let lifeColor = batteryLife > 8 ? "#00ff88" : (batteryLife > 4 ? "#ffaa00" : "#ff4444");
             let thermColor = throttle < 0.8 ? "#ff4444" : (throttle < 1.0 ? "#ffaa00" : "#888");
 
             display.innerHTML = `
                 <li style="display:flex; justify-content:space-between;"><span>Battery Life:</span> <b style="color:${lifeColor}">${batteryLife.toFixed(1)} Hrs</b> <span style="font-size:0.7em">(Mixed Usage)</span></li>
-                <li style="display:flex; justify-content:space-between;"><span>Thermals:</span> <b style="color:${thermColor}">${thermalStatus}</b> <span style="font-size:0.7em">(${Math.floor(totalHeat*throttle)}W / ${coolingCap}W Cap)</span></li>
+                <li style="display:flex; justify-content:space-between;"><span>Thermals:</span> <b style="color:${thermColor}">${thermalStatus}</b> <span style="font-size:0.7em">(${Math.floor(totalHeat * throttle)}W / ${coolingCap}W Cap)</span></li>
                 <li style="display:flex; justify-content:space-between;"><span>Weight:</span> <b>${totalWeight.toFixed(2)} kg</b></li>
                 <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                 <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
-                    <span>Bill of Materials:</span> <span style="color:#aaa">$${Math.floor(totalCost)}</span>
+                    <span>Mfg Cost:</span> <span style="color:#aaa">$${Math.floor(totalCost)}</span>
                 </li>
                 <li style="display:flex; justify-content:space-between;">
-                    <span>Net Profit:</span> <b style="color:${profit>0?'#00ff88':'#ff4444'}">$${Math.floor(profit)}</b>
+                    <span>Net Profit:</span> <b style="color:${profit > 0 ? '#00ff88' : '#ff4444'}">$${Math.floor(profit)}</b>
                 </li>
             `;
         }
 
         let errors = [];
-        if(disp && disp.raw.size > 18) errors.push("Display too huge for Laptop!");
-        
-        return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: {cpu, gpu, ram, sto, disp}, batteryLife };
+        if (disp && disp.raw.size > 18) errors.push("Display too huge for Laptop!");
+        if (mobo && mobo.raw.form !== 'Laptop Board') errors.push("Motherboard must be a Laptop Board Form Factor!");
+
+        return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: { cpu, mobo, gpu, ram, sto, disp }, batteryLife };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         return {
             name: document.getElementById('lap-name').value,
             year: parseFloat(document.getElementById('lap-year').value),
@@ -334,14 +343,14 @@ window.laptop = {
     },
 
     // --- 5. SAVE ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-laptop-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const active = db.inventory.filter(i => i.type === 'Laptop' && i.active === true);
 
-        if(active.length === 0) {
+        if (active.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active Laptops.</div>`;
             return;
         }
@@ -359,20 +368,26 @@ window.laptop = {
                         <span style="color:${specs.Battery.includes('Low') ? '#f55' : '#888'}">${specs.Battery}</span>
                     </div>
                 </div>
-                <button onclick="window.sys.discontinue(${p.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${p.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${p.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
+    saveSystem: function () {
         const physics = this.updatePhysics();
         const meta = this.scrapeData();
 
-        if(!physics.valid) {
+        if (!physics.valid) {
             alert("CANNOT LAUNCH: " + physics.errors[0]);
             return;
         }

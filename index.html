@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,14 +8,17 @@
     <!-- Importing Google Fonts for Typography & Hierarchy -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="main.css">
 </head>
+
 <body>
 
     <!-- OVERLAYS: Toasts & Modals -->
     <div id="toast-container"></div>
-    
+
     <div id="confirm-overlay" class="hidden">
         <div class="confirm-dialog">
             <h3 id="confirm-title">SYSTEM PROMPT</h3>
@@ -32,6 +36,7 @@
             <span class="logo-icon">💠</span>
             <span class="logo-text">HARDWARE TYCOON</span>
         </div>
+
         <div class="nav-modes">
             <button id="btn-current" class="nav-main active">CURRENT PRODUCTS</button>
             <button id="btn-all" class="nav-main">ALL PRODUCTS</button>
@@ -40,7 +45,7 @@
 
     <!-- MAIN APP LAYOUT (Sidebar + Content) -->
     <div class="app-container">
-        
+
         <!-- SIDEBAR -->
         <div class="sidebar">
             <div class="nav-group">
@@ -68,11 +73,12 @@
 
         <!-- CONTENT AREA -->
         <div class="main-content">
-            
+
             <!-- BREADCRUMB -->
             <div class="breadcrumb-bar">
                 <div id="breadcrumb" class="breadcrumb">
-                    <span>MARKETPLACE</span> <span class="separator">/</span> <span class="highlight">CURRENT LINEUP</span>
+                    <span>MARKETPLACE</span> <span class="separator">/</span> <span class="highlight">CURRENT
+                        LINEUP</span>
                 </div>
             </div>
 
@@ -104,22 +110,22 @@
 
     <script>
         // --- GLOBAL STATE ---
-        let currentPart = null;       // e.g., 'cpu', 'gpu'
-        let currentCategory = null;   // e.g., 'PARTS', 'PRODUCTS'
-        let currentView = 'storefront'; // 'storefront', 'inventory', or 'architect'
+        window.currentPart = null;       // e.g., 'cpu', 'gpu'
+        window.currentCategory = null;   // e.g., 'PARTS', 'PRODUCTS'
+        window.currentView = 'storefront'; // 'storefront', 'inventory', or 'architect'
 
         // --- GLOBAL UI FUNCTIONS ---
         // Toast Notification System
-        window.showToast = function(message, type = 'info') {
+        window.showToast = function (message, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
             toast.className = `toast toast-${type}`;
             toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✓' : 'ℹ'}</span> ${message}`;
-            
+
             container.appendChild(toast);
-            
+
             setTimeout(() => toast.classList.add('show'), 10);
-            
+
             setTimeout(() => {
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 300);
@@ -127,7 +133,7 @@
         };
 
         // Custom Confirm Dialog
-        window.showConfirm = function(message, onConfirm) {
+        window.showConfirm = function (message, onConfirm) {
             const overlay = document.getElementById('confirm-overlay');
             const msgEl = document.getElementById('confirm-msg');
             const btnOk = document.getElementById('btn-confirm-ok');
@@ -150,16 +156,16 @@
         };
 
         // --- A. NAVIGATION HANDLERS ---
-        
+
         // 1. Sidebar Links (Architect View)
         document.querySelectorAll('.nav-item').forEach(btn => {
-            btn.addEventListener('click', function() {
+            btn.addEventListener('click', function () {
                 const type = this.dataset.type;
                 const category = this.closest('.nav-group').querySelector('.label').innerText;
-                
-                currentPart = type;
-                currentCategory = category;
-                currentView = 'architect';
+
+                window.currentPart = type;
+                window.currentCategory = category;
+                window.currentView = 'architect';
 
                 // Visuals: Un-highlight top buttons, highlight sidebar
                 document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -176,50 +182,50 @@
         const btnAll = document.getElementById('btn-all');
 
         btnCurrent.addEventListener('click', () => {
-            currentView = 'storefront';
-            currentPart = null; // Exit architect mode
-            
+            window.currentView = 'storefront';
+            window.currentPart = null; // Exit architect mode
+
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-            
+
             updateTabButtons();
             updateBreadcrumb();
             transitionWorkspace();
         });
 
         btnAll.addEventListener('click', () => {
-            currentView = 'inventory';
-            currentPart = null; // Exit architect mode
-            
+            window.currentView = 'inventory';
+            window.currentPart = null; // Exit architect mode
+
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-            
+
             updateTabButtons();
             updateBreadcrumb();
             transitionWorkspace();
         });
 
         function updateTabButtons() {
-            btnCurrent.classList.toggle('active', currentView === 'storefront');
-            btnAll.classList.toggle('active', currentView === 'inventory');
+            btnCurrent.classList.toggle('active', window.currentView === 'storefront');
+            btnAll.classList.toggle('active', window.currentView === 'inventory');
         }
 
         function updateBreadcrumb() {
             const bc = document.getElementById('breadcrumb');
-            if(currentView === 'storefront') {
+            if (window.currentView === 'storefront') {
                 bc.innerHTML = `<span>MARKETPLACE</span> <span class="separator">/</span> <span class="highlight">CURRENT LINEUP</span>`;
-            } else if(currentView === 'inventory') {
+            } else if (window.currentView === 'inventory') {
                 bc.innerHTML = `<span>DATABASE</span> <span class="separator">/</span> <span class="highlight">ALL PRODUCTS</span>`;
-            } else if(currentView === 'architect') {
-                bc.innerHTML = `<span>${currentCategory} R&D</span> <span class="separator">/</span> <span class="highlight">${currentPart.toUpperCase()}</span>`;
+            } else if (window.currentView === 'architect') {
+                bc.innerHTML = `<span>${window.currentCategory} R&D</span> <span class="separator">/</span> <span class="highlight">${window.currentPart.toUpperCase()}</span>`;
             }
         }
 
         // --- B. DYNAMIC RENDER ENGINE (With Animation) ---
         function transitionWorkspace() {
             const workspace = document.getElementById('workspace');
-            
+
             // Fade out
             workspace.classList.remove('visible');
-            
+
             setTimeout(() => {
                 renderWorkspace();
                 // Fade in
@@ -232,7 +238,7 @@
             workspace.innerHTML = ""; // Clear previous content
 
             // MODE 1: STOREFRONT (MARKETPLACE)
-            if (currentView === 'storefront') {
+            if (window.currentView === 'storefront') {
                 if (window.renderStorefront) {
                     window.renderStorefront();
                 } else {
@@ -247,7 +253,7 @@
             }
 
             // MODE 2: INVENTORY (DATABASE)
-            if (currentView === 'inventory') {
+            if (window.currentView === 'inventory') {
                 if (window.renderInventory) {
                     window.renderInventory();
                 } else {
@@ -262,11 +268,11 @@
             }
 
             // MODE 3: ARCHITECT (DESIGN LAB)
-            if (currentView === 'architect') {
+            if (window.currentView === 'architect') {
                 // FIX: 'console' is a reserved browser word.
-                let moduleName = currentPart;
+                let moduleName = window.currentPart;
                 if (moduleName === 'console') moduleName = 'consoleArch';
-                
+
                 const module = window[moduleName];
 
                 if (module && typeof module.render === 'function') {
@@ -277,14 +283,55 @@
                     workspace.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-icon pulse">⚠️</div>
-                            <h2 class="empty-title">${currentPart.toUpperCase()} DIVISION INACTIVE</h2>
+                            <h2 class="empty-title">${window.currentPart.toUpperCase()} DIVISION INACTIVE</h2>
                             <p class="empty-desc">This R&D department has not been established yet.</p>
-                            <small>Deploy <code>${currentPart}.js</code> to commence operations.</small>
+                            <small>Deploy <code>${window.currentPart}.js</code> to commence operations.</small>
                         </div>
                     `;
                 }
             }
         }
+
+        // --- C. SYSTEM API ---
+
+        window.cloneToArchitect = function (id) {
+            if (!window.sys) return;
+            const db = window.sys.load();
+            const item = db.inventory.find(i => i.id === id);
+            if (!item) return;
+
+            // Prepare architect mode
+            window.currentView = 'architect';
+            window.currentPart = item.type.toLowerCase();
+
+            // Map type to category
+            const partTypes = ['cpu', 'gpu', 'ram', 'storage', 'mobo', 'camera', 'display'];
+            window.currentCategory = partTypes.includes(window.currentPart) ? 'PARTS' : 'PRODUCTS';
+
+            // Highlight side nav
+            document.querySelectorAll('.nav-item').forEach(b => {
+                b.classList.remove('active');
+                if (b.dataset.type === window.currentPart) b.classList.add('active');
+            });
+            updateTabButtons();
+            updateBreadcrumb();
+
+            // Render workspace, then load base data
+            transitionWorkspace();
+
+            setTimeout(() => {
+                let moduleName = window.currentPart;
+                if (moduleName === 'console') moduleName = 'consoleArch';
+                const module = window[moduleName];
+
+                if (module && typeof module.loadBase === 'function') {
+                    module.loadBase(item.raw || item); // Prefer raw original data
+                    if (window.showToast) window.showToast(`Loaded ${item.name} for iterative R&D.`, 'info');
+                } else {
+                    if (window.showToast) window.showToast(`Module ${moduleName} does not support Cloning yet.`, 'error');
+                }
+            }, 180); // Wait for transition fade
+        };
 
         // Trigger initial load directly into Storefront
         window.addEventListener('DOMContentLoaded', () => {
@@ -292,4 +339,5 @@
         });
     </script>
 </body>
+
 </html>

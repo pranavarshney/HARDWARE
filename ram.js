@@ -17,7 +17,7 @@ window.ram = {
     },
 
     // --- 2. UI RENDERER ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
 
         // Default year logic
@@ -27,9 +27,9 @@ window.ram = {
             <div class="architect-container">
                 
                 <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    ${Object.keys(this.presets).map(k => 
-                        `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.ram.loadPreset('${k}')">${k}</button>`
-                    ).join('')}
+                    ${Object.keys(this.presets).map(k =>
+            `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem;" onclick="window.ram.loadPreset('${k}')">${k}</button>`
+        ).join('')}
                 </div>
 
                 <div class="panel">
@@ -137,16 +137,16 @@ window.ram = {
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    loadPreset: function(name) {
+    loadPreset: function (name) {
         const p = this.presets[name];
-        if(!p) return;
-        
-        const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+        if (!p) return;
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
 
         set('ram-name', name);
         set('ram-gen', p.gen);
@@ -156,34 +156,49 @@ window.ram = {
         set('ram-volts', p.volts);
         set('ram-channels', p.channels);
         set('ram-price', p.price);
-        
+
+        this.updatePhysics();
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        set('ram-name', raw.name);
+        set('ram-gen', raw.gen);
+        set('ram-size', raw.size);
+        set('ram-freq', raw.freq);
+        set('ram-cl', raw.cl);
+        set('ram-volts', raw.volts);
+        set('ram-channels', raw.channels);
+        set('ram-price', raw.price);
+        set('ram-year', raw.year);
+
         this.updatePhysics();
     },
 
     // --- 3. PHYSICS ENGINE ---
-    updatePhysics: function() {
+    updatePhysics: function () {
         const d = this.scrapeData();
 
         // 1. TRUE LATENCY CALCULATION (The Real Physics)
         // Formula: (CAS Latency * 2000) / Frequency (in MT/s) = Nanoseconds
         // Example: CL16 @ 3200MHz = (16 * 2000) / 3200 = 10ns
         const trueLatency = (d.cl * 2000) / (d.freq || 1);
-        
+
         const latencyEl = document.getElementById('calc-latency');
-        if(latencyEl) latencyEl.value = trueLatency.toFixed(2) + " ns";
+        if (latencyEl) latencyEl.value = trueLatency.toFixed(2) + " ns";
 
         // 2. BANDWIDTH CALCULATION
         // Formula: Frequency * 8 bytes (64-bit) * Channels / 1000 = GB/s
         const rawBandwidth = (d.freq * 8 * d.channels) / 1000;
-        
+
         // 3. GENERATION EFFICIENCY
         // Newer gens have internal improvements (prefetch buffers, bank groups)
         const genMultipliers = {
-            'DDR1': 0.8, 'DDR2': 0.85, 'DDR3': 0.9, 
+            'DDR1': 0.8, 'DDR2': 0.85, 'DDR3': 0.9,
             'DDR4': 1.0, 'DDR5': 1.15, 'DDR6': 1.25, 'DDR7': 1.4
         };
         const efficiency = genMultipliers[d.gen] || 1.0;
-        
+
         const effectiveBandwidth = rawBandwidth * efficiency;
 
         // 4. STABILITY CHECK (Voltage vs Frequency)
@@ -196,9 +211,9 @@ window.ram = {
 
         // 5. FINAL SCORE
         let score = (effectiveBandwidth * 2) + (d.size * 0.5);
-        if (trueLatency < 10) score += 50; 
-        if (trueLatency > 15) score -= 20; 
-        
+        if (trueLatency < 10) score += 50;
+        if (trueLatency > 15) score -= 20;
+
         score = Math.floor(score);
 
         const display = document.getElementById('ram-live-stats');
@@ -211,11 +226,11 @@ window.ram = {
                 <li style="display:flex; justify-content:space-between; border-top:1px solid #444; padding-top:4px;"><span>Memory Score:</span> <b style="color:var(--accent)">${score}</b></li>
             `;
         }
-        
+
         return { score, effectiveBandwidth, trueLatency, stability };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         const get = (id) => {
             const el = document.getElementById(id);
             if (!el) return 0;
@@ -238,14 +253,14 @@ window.ram = {
     },
 
     // --- 4. DATABASE & SAVE LOGIC ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-ram-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const activeRAM = db.inventory.filter(i => i.type === 'RAM' && i.active === true);
 
-        if(activeRAM.length === 0) {
+        if (activeRAM.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:10px;">No active Memory Modules.</div>`;
             return;
         }
@@ -260,17 +275,23 @@ window.ram = {
                     <div style="margin-top:2px; color:#fff;">$${ram.raw?.price || 0}</div>
                 </div>
                 
-                <button onclick="window.sys.discontinue(${ram.id})" 
-                    style="margin-top:5px; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="window.cloneToArchitect(${ram.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${ram.id})" 
+                        style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
-        if(!window.sys || !window.sys.saveDesign) {
+    saveSystem: function () {
+        if (!window.sys || !window.sys.saveDesign) {
             alert("Error: Save system not found!");
             return;
         }
@@ -280,17 +301,17 @@ window.ram = {
 
         window.sys.saveDesign('RAM', {
             name: data.name,
-            
+
             // Display Specs
             specs: {
                 "Type": data.gen,
                 "Speed": `${data.gen}-${data.freq} CL${data.cl}`,
                 "Capacity": `${data.size}GB`,
-                "Bandwidth": `${results.effectiveBandwidth.toFixed(1)} GB/s`,
+                "Bandwidth": window.sys ? window.sys.formatUnits(results.effectiveBandwidth, 'GB/s') : `${results.effectiveBandwidth.toFixed(1)} GB/s`,
                 "Latency": `${results.trueLatency.toFixed(1)} ns`,
                 "Score": results.score
             },
-            
+
             // Raw Data
             price: data.price,
             year: data.year,

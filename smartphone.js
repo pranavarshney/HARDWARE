@@ -56,7 +56,7 @@ window.smartphone = {
     },
 
     // --- 2. RENDER UI ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
         const currentYear = new Date().getFullYear();
 
@@ -100,9 +100,15 @@ window.smartphone = {
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
                         <div class="input-group">
+                            <label>Motherboard</label>
+                            <select id="phone-mobo" class="part-selector"></select>
+                        </div>
+                        <div class="input-group">
                             <label>Memory Module</label>
                             <select id="phone-ram" class="part-selector"></select>
                         </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
                         <div class="input-group">
                             <label>RAM Generation</label>
                             <select id="phone-ram-gen" onchange="window.smartphone.updatePhysics()">
@@ -226,43 +232,52 @@ window.smartphone = {
         `;
 
         this.populatePartDropdowns();
-        
+
         container.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('change', () => this.updatePhysics());
             el.addEventListener('input', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    renderOptions: function(obj) {
+    renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
     },
 
-    populatePartDropdowns: function() {
-        if(!window.sys) return;
+    populatePartDropdowns: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         const fill = (id, type) => {
             const el = document.getElementById(id);
-            if(!el) return;
+            if (!el) return;
             const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
-            
-            if(parts.length === 0) {
+
+            if (parts.length === 0) {
                 el.innerHTML = `<option value="">No ${type}s</option>`;
             } else {
                 el.innerHTML = parts.map(p => {
+                    const status = p.active ? "" : " (Archived)";
                     let extra = "";
-                    if(type === 'Display') extra = ` | ${p.specs.Resolution}`;
-                    if(type === 'Camera') extra = ` | ${p.specs.Main}`;
-                    return `<option value="${p.id}">${p.name}${extra}</option>`;
+                    if (type === 'Display') extra = ` | ${p.specs.Resolution}`;
+                    if (type === 'Camera') extra = ` | ${p.specs.Main}`;
+                    if (type === 'Motherboard') extra = ` | ${p.specs.Form}`;
+                    return `<option value="${p.id}">${p.name}${status}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
                 }).join('');
-                el.value = parts[parts.length-1].id; 
+
+                const activeParts = parts.filter(p => p.active);
+                if (activeParts.length > 0) {
+                    el.value = activeParts[activeParts.length - 1].id;
+                } else {
+                    el.value = parts[parts.length - 1].id;
+                }
             }
         };
 
         fill('phone-cpu', 'CPU');
+        fill('phone-mobo', 'Motherboard');
         fill('phone-gpu', 'GPU');
         fill('phone-ram', 'RAM');
         fill('phone-storage', 'Storage');
@@ -271,18 +286,19 @@ window.smartphone = {
     },
 
     // --- 3. PHYSICS ENGINE V2.0 ---
-    updatePhysics: function() {
-        if(!window.sys) return;
+    updatePhysics: function () {
+        if (!window.sys) return;
         const db = window.sys.load();
-        
+
         const getPart = (id) => {
             const val = document.getElementById(id).value;
-            if(!val) return null;
+            if (!val) return null;
             return db.inventory.find(i => i.id == val);
         };
 
         // Get Parts
         const cpu = getPart('phone-cpu');
+        const mobo = getPart('phone-mobo');
         const gpu = getPart('phone-gpu');
         const ram = getPart('phone-ram');
         const sto = getPart('phone-storage');
@@ -308,35 +324,36 @@ window.smartphone = {
         const hasStylus = document.getElementById('feat-stylus').checked;
 
         let errors = [];
+        if (mobo && mobo.raw.form !== 'Mobile Board') errors.push("Motherboard must be a Mobile Board Form Factor!");
 
         // --- A. FORM FACTOR PENALTIES & PHYSICALS ---
         let mfgCost = 20, extraWeight = 0, thickness = 7.5;
         let thermalMult = 1.0;
         let repairability = 8 + chassis.repair + feat.repair;
 
-        if(form === 'Foldable') { 
-            mfgCost += 150; extraWeight += 90; thickness = 14.5; thermalMult = 0.8; repairability -= 4; 
-            if(disp && disp.raw.size < 7) errors.push("Foldable needs display > 7 inches");
+        if (form === 'Foldable') {
+            mfgCost += 150; extraWeight += 90; thickness = 14.5; thermalMult = 0.8; repairability -= 4;
+            if (disp && disp.raw.size < 7) errors.push("Foldable needs display > 7 inches");
         }
-        if(form === 'Flip') { 
-            mfgCost += 80; extraWeight += 30; thickness = 15.5; thermalMult = 0.7; repairability -= 3; 
+        if (form === 'Flip') {
+            mfgCost += 80; extraWeight += 30; thickness = 15.5; thermalMult = 0.7; repairability -= 3;
         }
-        if(form === 'Gaming') { 
+        if (form === 'Gaming') {
             mfgCost += 30; extraWeight += 50; thickness = 9.5; thermalMult = 1.6; // Vapor chambers
         }
 
         // Add extra hardware weights/costs
-        if(hasWireless) { extraWeight += 10; mfgCost += 10; thickness += 0.5; }
-        if(hasMag) { extraWeight += 15; mfgCost += 15; }
-        if(hasStylus) { extraWeight += 15; mfgCost += 25; thickness += 1.0; }
+        if (hasWireless) { extraWeight += 10; mfgCost += 10; thickness += 0.5; }
+        if (hasMag) { extraWeight += 15; mfgCost += 15; }
+        if (hasStylus) { extraWeight += 15; mfgCost += 25; thickness += 1.0; }
 
         // Final Dimensions
         const totalWeight = chassis.weight + extraWeight + (batCap * 0.015) + (disp ? disp.raw.size * 12 : 50);
-        
+
         // --- B. THERMALS & IP RATING ---
         // IP68/69K seals the phone, trapping heat
-        if(feat.ip === 'IP68') thermalMult *= 0.9;
-        if(feat.ip === 'IP69K') thermalMult *= 0.85;
+        if (feat.ip === 'IP68') thermalMult *= 0.9;
+        if (feat.ip === 'IP69K') thermalMult *= 0.85;
 
         // Max sustained TDP
         const maxSustainedTDP = (chassis.thermals * 5) * thermalMult;
@@ -349,18 +366,18 @@ window.smartphone = {
         if (cpuTDP > 50) errors.push("CPU TDP exceeds mobile limits (Max 50W)");
 
         const avgCpuPwr = cpuTDP * 0.35 * ramGen.pwrMult; // Ram efficiency helps SoC
-        const avgGpuPwr = gpuTDP * 0.2; 
-        
+        const avgGpuPwr = gpuTDP * 0.2;
+
         // Display Power (Adaptive brightness average ~ 20% of peak nits)
         let dispPwr = 1.0;
-        if(disp) {
+        if (disp) {
             const area = (disp.raw.w * disp.raw.h) / 2000000;
             // 200 nits average indoor use.
             dispPwr = area * ((disp.raw.nits * 0.2) / 200) * (disp.raw.hz / 60) * 0.8;
         }
-        
-        let sysPwr = (avgCpuPwr + avgGpuPwr + dispPwr + feat.pwr) / os.battery; 
-        
+
+        let sysPwr = (avgCpuPwr + avgGpuPwr + dispPwr + feat.pwr) / os.battery;
+
         const wattHours = (batCap * 3.8) / 1000;
         const batteryLifeHours = wattHours / Math.max(0.5, sysPwr);
 
@@ -371,7 +388,7 @@ window.smartphone = {
 
         // --- D. BOTTLENECKS ---
         let storageBottleneck = false;
-        if(cam && stoGen) {
+        if (cam && stoGen) {
             // High MP or 8K video needs UFS 3.1 minimum
             if ((cam.raw.mp > 100 || cam.raw.vid === '8K') && stoGen.speed < 2000) {
                 storageBottleneck = true;
@@ -384,32 +401,32 @@ window.smartphone = {
         let baseGpu = gpu ? (gpu.raw.benchmarks?.gaming || gpu.specs?.Score || 0) : 0;
         let baseCam = cam ? ((cam.raw.benchmarks?.photo || 0) + (cam.raw.benchmarks?.video || 0)) : 0;
         let baseDisp = disp ? (disp.raw.benchmarks?.creative || 0) : 0;
-        
+
         // OS & RAM Generation Multipliers
         baseCpu *= ramGen.speedMult * os.perf;
         baseGpu *= ramGen.speedMult * os.perf;
-        if(storageBottleneck) baseCam *= 0.5;
+        if (storageBottleneck) baseCam *= 0.5;
 
         // Throttling under heavy load
         const peakTDP = cpuTDP + gpuTDP;
         let throttle = 1.0;
-        if(peakTDP > maxSustainedTDP) {
+        if (peakTDP > maxSustainedTDP) {
             throttle = maxSustainedTDP / peakTDP;
             // Phones can burst for a minute, so we soften the penalty slightly
-            throttle = Math.pow(throttle, 0.7); 
+            throttle = Math.pow(throttle, 0.7);
         }
 
         const finalPerf = (baseCpu + baseGpu) * throttle;
-        
+
         // Dynamic Score Weighting based on Form Factor
         let wPerf = 0.3, wCam = 0.3, wDisp = 0.2, wBat = 0.2;
         if (form === 'Gaming') { wPerf = 0.5; wCam = 0.1; wDisp = 0.25; wBat = 0.15; }
         if (form === 'Foldable') { wPerf = 0.2; wCam = 0.2; wDisp = 0.4; wBat = 0.2; }
 
         let phoneScore = (finalPerf * wPerf) + (baseCam * wCam) + (baseDisp * wDisp * 10) + (batteryLifeHours * 200 * wBat);
-        if(hasNFC) phoneScore += 200;
-        if(hasStylus) phoneScore += 500;
-        
+        if (hasNFC) phoneScore += 200;
+        if (hasStylus) phoneScore += 500;
+
         // --- F. MARKET LABEL ---
         let marketLabel = "Mid-Range";
         if (phoneScore > 20000 && sellPrice < 600) marketLabel = "Value King 👑";
@@ -418,16 +435,16 @@ window.smartphone = {
         else if (sellPrice <= 300) marketLabel = "Budget Entry";
 
         // --- G. COST & PROFIT ---
-        const partsCost = (cpu?.raw.price||0) + (gpu?.raw.price||0) + (ram?.raw.price||0) + (sto?.raw.price||0) + (cam?.raw.price||0) + (disp?.raw.price||0);
-        const batCost = (batCap / 1000) * batTech.costPerAh;
-        
-        const totalCost = partsCost + batCost + chassis.cost + feat.cost + charge.cost + ramGen.cost + stoGen.cost + mfgCost + os.cost;
-        const profit = sellPrice - totalCost;
+        const moboCost = mobo ? (mobo.raw.price || 0) : 0;
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + (cam?.raw.price || 0) + (disp?.raw.price || 0) + moboCost;
+        const totalCost = Math.ceil(partsCost * 1.10);
+        const normalizedSellPrice = parseFloat(document.getElementById('phone-price').value) || 0;
+        const profit = normalizedSellPrice - totalCost;
 
         // --- H. RENDER ---
         const displayUI = document.getElementById('phone-live-stats');
-        if(displayUI) {
-            if(errors.length > 0) {
+        if (displayUI) {
+            if (errors.length > 0) {
                 displayUI.innerHTML = errors.map(e => `<li style="color:#ff1744; font-weight:bold;">❌ ${e}</li>`).join('');
             } else {
                 let lifeColor = batteryLifeHours > 10 ? "#00e676" : (batteryLifeHours > 6 ? "#ffaa00" : "#ff1744");
@@ -438,7 +455,7 @@ window.smartphone = {
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Market Tier:</span> <b style="color:var(--accent)">${marketLabel}</b></li>
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Battery Life:</span> <b style="color:${lifeColor}">${batteryLifeHours.toFixed(1)} Hours</b></li>
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>0-100% Charge:</span> <b>${Math.floor(chargeTimeMins)} mins</b></li>
-                    <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Thermal Peak:</span> <b style="color:${thermColor}">${throttle<0.9?'Throttling':'Optimal'} (${(throttle*100).toFixed(0)}%)</b></li>
+                    <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Thermal Peak:</span> <b style="color:${thermColor}">${throttle < 0.9 ? 'Throttling' : 'Optimal'} (${(throttle * 100).toFixed(0)}%)</b></li>
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Physicals:</span> <b>${Math.floor(totalWeight)}g | ${thickness.toFixed(1)}mm</b></li>
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Repairability:</span> <b style="color:${repairColor}">${Math.max(0, repairability)}/10</b></li>
                     
@@ -446,23 +463,23 @@ window.smartphone = {
                         <span>Composite Score:</span> <b style="color:var(--accent)">${Math.floor(phoneScore)}</b>
                     </li>
                     <li style="display:flex; justify-content:space-between;">
-                        <span>Bill of Materials:</span> <span style="color:#aaa">-$${Math.floor(totalCost)}</span>
+                        <span>Mfg Cost:</span> <span style="color:#aaa">-$${Math.floor(totalCost)}</span>
                     </li>
                     <li style="border-top:1px dashed #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.9rem;">
-                        <span>Net Profit:</span> <b style="color:${profit>0?'#00e676':'#ff1744'}">$${Math.floor(profit)}</b>
+                        <span>Net Profit:</span> <b style="color:${profit > 0 ? '#00e676' : '#ff1744'}">$${Math.floor(profit)}</b>
                     </li>
                 `;
             }
         }
 
-        return { 
-            valid: errors.length === 0, 
+        return {
+            valid: errors.length === 0,
             totalCost, phoneScore, errors, batteryLifeHours, marketLabel, osName: document.getElementById('phone-os').value, form,
-            parts: {cpu, gpu, ram, sto, cam, disp}
+            parts: { cpu, mobo, gpu, ram, sto, cam, disp }
         };
     },
 
-    scrapeData: function() {
+    scrapeData: function () {
         return {
             name: document.getElementById('phone-name').value,
             year: parseFloat(document.getElementById('phone-year').value),
@@ -472,14 +489,14 @@ window.smartphone = {
     },
 
     // --- 5. SAVE ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-phone-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const active = db.inventory.filter(i => i.type === 'Smartphone' && i.active === true);
 
-        if(active.length === 0) {
+        if (active.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:20px;">No active Smartphones on the market.</div>`;
             return;
         }
@@ -505,20 +522,26 @@ window.smartphone = {
                         <span style="color:${batColor}">${specs.Battery}</span>
                     </div>
                 </div>
-                <button onclick="window.sys.discontinue(${p.id})" 
-                    style="margin-top:10px; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:10px;">
+                    <button onclick="window.cloneToArchitect(${p.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${p.id})" 
+                        style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
+    saveSystem: function () {
         const physics = this.updatePhysics();
         const meta = this.scrapeData();
 
-        if(!physics.valid) {
+        if (!physics.valid) {
             alert("CANNOT LAUNCH: Check validation errors.");
             return;
         }

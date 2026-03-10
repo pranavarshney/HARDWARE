@@ -2,28 +2,69 @@
  * INCLUDES: Save System, Advanced Search, Sort, Filter, Edit Module, and Storefront UI
  */
 
-const DB_KEY = "HT_DATA_V2"; 
+const DB_KEY = "HT_DATA_V2";
 
 window.sys = {
     // --- 1. CORE STORAGE ---
-    load: function() {
+    load: function () {
         const data = localStorage.getItem(DB_KEY);
-        return data ? JSON.parse(data) : { inventory: [] };
+        let parsed = data ? JSON.parse(data) : { inventory: [] };
+        return parsed;
     },
 
-    save: function(data) {
+    save: function (data) {
         localStorage.setItem(DB_KEY, JSON.stringify(data));
     },
 
+    formatUnits: function (value, baseUnit) {
+        if (!value || isNaN(value)) return `0 ${baseUnit}`;
+
+        let val = Number(value);
+        let unit = baseUnit;
+
+        if (baseUnit === 'MB/s' || baseUnit === 'MBps') {
+            if (val >= 1000000) { val = val / 1000000; unit = 'TB/s'; }
+            else if (val >= 1000) { val = val / 1000; unit = 'GB/s'; }
+        } else if (baseUnit === 'GB/s' || baseUnit === 'GBps') {
+            if (val >= 1000) { val = val / 1000; unit = 'TB/s'; }
+        } else if (baseUnit === 'MB') {
+            if (val >= 1000000) { val = val / 1000000; unit = 'TB'; }
+            else if (val >= 1000) { val = val / 1000; unit = 'GB'; }
+        } else if (baseUnit === 'GB') {
+            if (val >= 1000) { val = val / 1000; unit = 'TB'; }
+        } else if (baseUnit === 'W') {
+            if (val >= 1000000) { val = val / 1000000; unit = 'MW'; }
+            else if (val >= 1000) { val = val / 1000; unit = 'kW'; }
+        } else if (baseUnit === 'Hz') {
+            if (val >= 1000000000) { val = val / 1000000000; unit = 'GHz'; }
+            else if (val >= 1000000) { val = val / 1000000; unit = 'MHz'; }
+            else if (val >= 1000) { val = val / 1000; unit = 'kHz'; }
+        } else if (baseUnit === 'MHz') {
+            if (val >= 1000) { val = val / 1000; unit = 'GHz'; }
+        } else if (baseUnit === 'Flops' || baseUnit === 'FLOPS') {
+            if (val >= 1000000000000000) { val = val / 1000000000000000; unit = 'PFLOPS'; }
+            else if (val >= 1000000000000) { val = val / 1000000000000; unit = 'TFLOPS'; }
+            else if (val >= 1000000000) { val = val / 1000000000; unit = 'GFLOPS'; }
+        }
+
+        // Format to max 2 decimal places, but drop .00
+        return `${Number(val.toFixed(2))} ${unit}`;
+    },
+
     // --- 2. API ---
-    saveDesign: function(type, specs) {
+    saveDesign: function (type, specs) {
         const db = this.load();
-        
+
+        // Normalize top-level retail price so inventory sorting/display is stable.
+        const normalizedPrice = Number.isFinite(Number(specs.price)) ? Number(specs.price) : 0;
+        specs.price = normalizedPrice;
+        if (specs.raw && !Number.isFinite(Number(specs.raw.price))) specs.raw.price = normalizedPrice;
+
         // Extract numeric score for sorting purposes
         let scoreVal = 0;
-        if(specs.specs && specs.specs.Score) scoreVal = parseFloat(specs.specs.Score) || 0; // if "1200"
-        if(scoreVal === 0 && typeof specs.specs.Score === 'string') scoreVal = parseFloat(specs.specs.Score.replace(/[^0-9.]/g, '')) || 0; // if "1200 pts"
-        
+        if (specs.specs && specs.specs.Score) scoreVal = parseFloat(specs.specs.Score) || 0; // if "1200"
+        if (scoreVal === 0 && typeof specs.specs.Score === 'string') scoreVal = parseFloat(specs.specs.Score.replace(/[^0-9.]/g, '')) || 0; // if "1200 pts"
+
         const newItem = {
             id: Date.now(),
             type: type,
@@ -35,64 +76,64 @@ window.sys = {
             year: specs.year,
             score: scoreVal
         };
-        
+
         db.inventory.push(newItem);
         this.save(db);
-        
-        if(window.showToast) window.showToast(`RELEASED: ${newItem.name} is now on the market!`, 'success');
+
+        if (window.showToast) window.showToast(`RELEASED: ${newItem.name} is now on the market!`, 'success');
         else alert(`RELEASED: ${newItem.name} is now on the market!`);
-        
+
         // Refresh specific architect view if open
         const moduleName = type.toLowerCase();
-        if(window[moduleName] && window[moduleName].refreshLineup) {
+        if (window[moduleName] && window[moduleName].refreshLineup) {
             window[moduleName].refreshLineup();
         }
     },
 
-    discontinue: function(id) {
+    discontinue: function (id) {
         const db = this.load();
         const item = db.inventory.find(i => i.id === id);
-        
+
         if (item) {
             item.active = false;
             this.save(db);
-            
-            if(window.showToast) window.showToast(`${item.name} has been discontinued.`, 'info');
+
+            if (window.showToast) window.showToast(`${item.name} has been discontinued.`, 'info');
 
             // Refresh views if visible
-            if(window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
-            if(window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
-            
+            if (window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
+            if (window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
+
             // Refresh specific architect view
             const moduleName = item.type.toLowerCase();
-            if(window[moduleName] && window[moduleName].refreshLineup) {
+            if (window[moduleName] && window[moduleName].refreshLineup) {
                 window[moduleName].refreshLineup();
             }
         }
     },
 
-    deleteDesign: function(id) {
-        if(window.showConfirm) {
+    deleteDesign: function (id) {
+        if (window.showConfirm) {
             window.showConfirm("Permanently delete this record? This cannot be undone.", () => {
                 this._executeDelete(id);
             });
-        } else if(confirm("Permanently delete this record? This cannot be undone.")) {
+        } else if (confirm("Permanently delete this record? This cannot be undone.")) {
             this._executeDelete(id);
         }
     },
 
-    _executeDelete: function(id) {
+    _executeDelete: function (id) {
         const db = this.load();
         db.inventory = db.inventory.filter(item => item.id !== id);
         this.save(db);
-        
-        if(window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
-        if(window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
-        if(window.showToast) window.showToast('Product record deleted.', 'error');
+
+        if (window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
+        if (window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
+        if (window.showToast) window.showToast('Product record deleted.', 'error');
     },
 
     // --- 3. EDIT SYSTEM ---
-    openEditModal: function(id) {
+    openEditModal: function (id) {
         const db = this.load();
         const item = db.inventory.find(i => i.id === id);
         if (!item) return;
@@ -138,7 +179,7 @@ window.sys = {
         document.body.appendChild(overlay);
     },
 
-    saveEdit: function(id) {
+    saveEdit: function (id) {
         const db = this.load();
         const itemIndex = db.inventory.findIndex(i => i.id === id);
         if (itemIndex === -1) return;
@@ -158,11 +199,11 @@ window.sys = {
         document.getElementById('edit-modal-overlay').remove();
 
         if (window.showToast) window.showToast('Product updated successfully!', 'success');
-        
+
         // Re-render views
-        if(window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
-        if(window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
-        
+        if (window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
+        if (window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
+
         const moduleName = db.inventory[itemIndex].type.toLowerCase();
         if (window[moduleName] && window[moduleName].refreshLineup) {
             window[moduleName].refreshLineup();
@@ -182,10 +223,10 @@ let invState = {
 };
 
 // --- 5. RENDER INVENTORY SYSTEM ---
-window.renderInventory = function() {
+window.renderInventory = function () {
     const workspace = document.getElementById('workspace');
     const db = window.sys.load();
-    
+
     // --- RENDER TOOLBAR ---
     workspace.innerHTML = `
         <div class="panel" style="margin-bottom:20px; border-color:var(--border-light); background:rgba(0,0,0,0.2);">
@@ -277,7 +318,7 @@ window.renderInventory = function() {
 
     // E. Sorting
     items.sort((a, b) => {
-        switch(invState.sort) {
+        switch (invState.sort) {
             case 'newest': return b.id - a.id;
             case 'oldest': return a.id - b.id;
             case 'price_high': return (b.raw.price || 0) - (a.raw.price || 0);
@@ -289,7 +330,7 @@ window.renderInventory = function() {
 
     // --- RENDER ITEMS ---
     const listContainer = document.getElementById('inv-list');
-    
+
     if (items.length === 0) {
         listContainer.innerHTML = `
             <div class="empty-state" style="grid-column:1/-1; min-height:200px;">
@@ -309,12 +350,12 @@ window.renderInventory = function() {
         };
         const accent = typeColors[item.type] || 'var(--accent)';
         const opacity = item.active ? 1 : 0.6;
-        const statusBadge = item.active 
+        const statusBadge = item.active
             ? `<span style="color:#00e676; font-size:0.65rem; font-weight:bold; border:1px solid rgba(0,230,118,0.3); background:rgba(0,230,118,0.1); padding:3px 6px; border-radius:4px;">ACTIVE</span>`
             : `<span style="color:#8b8d98; font-size:0.65rem; font-weight:bold; border:1px solid #3f414d; background:rgba(255,255,255,0.05); padding:3px 6px; border-radius:4px;">ARCHIVED</span>`;
 
         // Format Specs
-        let specHtml = Object.entries(item.specs).map(([k,v]) => 
+        let specHtml = Object.entries(item.specs).map(([k, v]) =>
             `<div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
                 <span style="color:var(--text-muted); font-weight:600;">${k}</span>
                 <span style="color:#fff; font-family:var(--font-mono);">${v}</span>
@@ -327,7 +368,7 @@ window.renderInventory = function() {
                     <div>
                         <div style="font-size:0.7rem; color:${accent}; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;">${item.type}</div>
                         <h3 style="margin:0; color:#fff; font-size:1.15rem; border:none; padding:0;">${item.name}</h3>
-                        <div style="margin-top:6px;">${statusBadge}</div>
+                        <div style="margin-top:6px;">${statusBadge} <span style="font-size:0.75rem; color:var(--text-main); font-weight:bold; margin-left:8px; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">SCORE: ${item.score || 0}</span></div>
                     </div>
                     <div style="text-align:right;">
                         <div style="font-size:1.2rem; color:var(--accent); font-family:var(--font-mono); font-weight:bold;">$${item.raw.price || 0}</div>
@@ -335,30 +376,37 @@ window.renderInventory = function() {
                     </div>
                 </div>
                 
-                <div style="flex:1; margin-bottom:20px; background:rgba(0,0,0,0.3); padding:10px 12px; border-radius:6px; border:1px solid var(--border-dim);">
+                <div style="flex:1; margin-bottom:10px; background:rgba(0,0,0,0.3); padding:10px 12px; border-radius:6px; border:1px solid var(--border-dim);">
                     ${specHtml}
                 </div>
 
-                <div style="display:flex; gap:8px; margin-top:auto;">
+                <div style="display:flex; gap:8px;">
+                    <button onclick="window.cloneToArchitect(${item.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        CLONE TO R&D
+                    </button>
+                </div>
+
+                <div style="display:flex; gap:8px; margin-top:8px;">
                     <button onclick="window.sys.openEditModal(${item.id})" 
                         style="flex:1; background:rgba(255,255,255,0.05); color:#fff; border:1px solid var(--border-light); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
                         EDIT
                     </button>
-                    ${item.active ? 
-                        `<button onclick="window.sys.discontinue(${item.id})" 
+                    ${item.active ?
+                `<button onclick="window.sys.discontinue(${item.id})" 
                             style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
                             DISCONTINUE
-                        </button>` 
-                        : `<button onclick="window.sys.deleteDesign(${item.id})" 
+                        </button>`
+                : `<button onclick="window.sys.deleteDesign(${item.id})" 
                             style="flex:1; background:transparent; color:var(--text-muted); border:1px solid var(--border-dim); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
                             DELETE
                         </button>`
-                    }
+            }
                 </div>
             </div>
         `;
     }).join('');
-    
+
     // Focus management for search
     const searchInput = document.getElementById('inv-search');
     if (searchInput && document.activeElement === searchInput) {
@@ -370,22 +418,22 @@ window.renderInventory = function() {
 };
 
 // --- HELPERS ---
-window.updateInvState = function(key, val) {
-    if(key === 'minScore' || key === 'minPrice') val = parseFloat(val);
+window.updateInvState = function (key, val) {
+    if (key === 'minScore' || key === 'minPrice') val = parseFloat(val);
     invState[key] = val;
     window.renderInventory();
 };
 
-window.toggleAdvFilter = function() {
+window.toggleAdvFilter = function () {
     invState.advOpen = !invState.advOpen;
     window.renderInventory();
 };
 
 // --- 6. RENDER STOREFRONT (MARKETPLACE) ---
-window.renderStorefront = function() {
+window.renderStorefront = function () {
     const workspace = document.getElementById('workspace');
     const db = window.sys.load();
-    
+
     // 1. Filter only ACTIVE products
     const activeProducts = db.inventory.filter(i => i.active);
 
@@ -395,8 +443,10 @@ window.renderStorefront = function() {
             <div class="empty-state">
                 <div class="empty-icon pulse" style="filter: none; text-shadow: 0 0 20px var(--accent);">🛒</div>
                 <h2 class="empty-title">STOREFRONT EMPTY</h2>
-                <p class="empty-desc">You currently have no products on the market.</p>
-                <small>Navigate to the sidebar to begin R&D and launch a product.</small>
+                <div class="empty-guide" style="margin-top: 20px; padding: 20px; background: rgba(0, 230, 118, 0.05); border: 1px dashed var(--accent-success); border-radius: 8px; color: #ccc;">
+                    <p style="margin:0 0 10px 0;">No products have been released to the market yet.</p>
+                    <p style="margin:0; font-size:1.1rem;">👈 Start in <span style="color:var(--accent-success); font-weight:bold;">R&D</span> by selecting a component from the sidebar.</p>
+                </div>
             </div>`;
         return;
     }
@@ -406,15 +456,15 @@ window.renderStorefront = function() {
     activeProducts.forEach(item => {
         const type = item.type;
         if (!groups[type]) {
-            groups[type] = { 
-                items: [], 
-                flagshipId: null, 
-                highestScore: -1 
+            groups[type] = {
+                items: [],
+                flagshipId: null,
+                highestScore: -1
             };
         }
-        
+
         groups[type].items.push(item);
-        
+
         // Calculate Flagship
         const score = item.score || 0;
         if (score > groups[type].highestScore) {
@@ -428,7 +478,7 @@ window.renderStorefront = function() {
     const activeDivisions = Object.keys(groups).length;
     // Just a fun aesthetic calc for "Company Valuation" based on product prices/scores
     const estValue = activeProducts.reduce((sum, item) => sum + (item.raw.price || 0) * (item.score || 100) * 10, 0);
-    const formattedValue = estValue > 1000000 ? `$${(estValue/1000000).toFixed(1)}M` : `$${estValue.toLocaleString()}`;
+    const formattedValue = estValue > 1000000 ? `$${(estValue / 1000000).toFixed(1)}M` : `$${estValue.toLocaleString()}`;
 
     // 4. Color Mapping for UI
     const typeColors = {
@@ -459,7 +509,7 @@ window.renderStorefront = function() {
     // Iterate through each division
     for (const [type, group] of Object.entries(groups)) {
         const color = typeColors[type] || 'var(--accent)';
-        
+
         // Sort items in the group by score descending (so Flagship is first)
         group.items.sort((a, b) => (b.score || 0) - (a.score || 0));
 
@@ -474,7 +524,7 @@ window.renderStorefront = function() {
 
         group.items.forEach(item => {
             const isFlagship = item.id === group.flagshipId;
-            
+
             // Extract top 3 specs for the hero card
             const topSpecs = Object.entries(item.specs).slice(0, 3);
             const specsHtml = topSpecs.map(([k, v]) => `
@@ -491,6 +541,9 @@ window.renderStorefront = function() {
                     <div class="storefront-card-header">
                         <div class="storefront-card-year">${item.year || ''}</div>
                         <h3 class="storefront-card-title">${item.name}</h3>
+                        <div style="margin-top:5px; font-size:0.75rem; color:var(--text-main); font-weight:bold; background:rgba(0,0,0,0.5); padding:3px 6px; border-radius:4px; display:inline-block; border:1px solid var(--border-light);">
+                            BENCHMARK: <span style="color:var(--accent);">${item.score || 0}</span>
+                        </div>
                     </div>
 
                     <div class="storefront-card-specs">
@@ -499,7 +552,10 @@ window.renderStorefront = function() {
 
                     <div class="storefront-card-footer">
                         <div class="storefront-price">$${item.raw.price || 0}</div>
-                        <button class="storefront-edit-btn" onclick="window.sys.openEditModal(${item.id})">EDIT INFO</button>
+                        <div style="display:flex; gap:5px;">
+                            <button class="storefront-edit-btn" onclick="window.sys.openEditModal(${item.id})">EDIT</button>
+                            <button class="storefront-edit-btn" style="color:var(--accent-success); border-color:var(--accent-success);" onclick="window.cloneToArchitect(${item.id})">CLONE</button>
+                        </div>
                     </div>
                 </div>
             `;

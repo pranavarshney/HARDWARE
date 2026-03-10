@@ -3,7 +3,7 @@
  */
 
 window.cpu = {
-    
+
     // --- 1. CONFIGURATION & DATA ---
     simdInstructions: [
         { name: "MMX", year: 1996, boost: 1.05 },
@@ -26,11 +26,11 @@ window.cpu = {
     },
 
     // --- 2. UI RENDERER ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
         const currentYear = new Date().getFullYear();
         const defaultFab = this.estimateFab(currentYear);
-        
+
         container.innerHTML = `
             <div class="architect-container">
                 
@@ -215,12 +215,12 @@ window.cpu = {
             document.getElementById('simd-container').innerHTML = this.renderSimdOptions(parseInt(e.target.value));
             this.updatePreview();
         });
-        
+
         this.updatePreview();
-        this.refreshLineup(); 
+        this.refreshLineup();
     },
 
-    estimateFab: function(year) {
+    estimateFab: function (year) {
         if (year < 1990) return 3000;
         if (year < 2000) return 250;
         if (year < 2010) return 45;
@@ -228,7 +228,7 @@ window.cpu = {
         return 3;
     },
 
-    renderSimdOptions: function(year) {
+    renderSimdOptions: function (year) {
         return this.simdInstructions.map(simd => {
             const isAvailable = year >= simd.year;
             return `
@@ -240,10 +240,10 @@ window.cpu = {
         }).join('');
     },
 
-    applySegmentDefaults: function() {
+    applySegmentDefaults: function () {
         const segName = document.getElementById('cpu-segment').value;
         const seg = this.segments[segName];
-        if(!seg) return;
+        if (!seg) return;
 
         const sockEl = document.getElementById('cpu-socket');
         sockEl.innerHTML = seg.sockets.map(s => `<option value="${s}">${s}</option>`).join('');
@@ -261,32 +261,78 @@ window.cpu = {
         this.updatePreview();
     },
 
-    toggleIgpu: function() {
+    toggleIgpu: function () {
         const isEnabled = document.getElementById('igpu-enable').checked;
         document.getElementById('igpu-inputs').style.display = isEnabled ? 'block' : 'none';
         this.updatePreview();
     },
 
-    getTierLabel: function(score, isMulti) {
-        if(isMulti) {
-            if(score < 5000) return `<span style="color:#aaa;">[Entry Level]</span>`;
-            if(score < 15000) return `<span style="color:#00aaff;">[Mainstream]</span>`;
-            if(score < 30000) return `<span style="color:#bd00ff;">[High-End]</span>`;
-            if(score < 80000) return `<span style="color:#ffaa00;">[Enthusiast]</span>`;
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        set('cpu-name', raw.name);
+        set('cpu-segment', raw.segment);
+        set('cpu-arch', raw.arch);
+        set('cpu-fab', raw.fab);
+        set('p-core-count', raw.pCores);
+        set('p-base', raw.pBase);
+        set('p-allcore', raw.pAllCore);
+        set('p-turbo', raw.pTurbo);
+        set('e-core-count', raw.eCores);
+        set('e-base', raw.eBase);
+        set('e-allcore', raw.eAllCore);
+        set('e-turbo', raw.eTurbo);
+        set('e-ratio', raw.eRatio);
+        set('total-threads', raw.threads);
+        set('cpu-ipc', raw.ipc);
+        set('l3-cache', raw.l3);
+        set('cpu-pl1', raw.pl1);
+        set('cpu-pl2', raw.pl2);
+        set('mem-channels', raw.memChannels);
+        set('pcie-lanes', raw.pcie);
+        setCheck('igpu-enable', raw.igpuEnabled);
+        set('igpu-cus', raw.igpuCus);
+        set('igpu-clock', raw.igpuClock);
+        set('npu-cores', raw.aiCores);
+        set('npu-clock', raw.aiClock);
+        set('npu-ops', raw.aiOps);
+        setCheck('dedicated-ai', raw.dedicatedAI);
+        set('cpu-year', raw.year);
+        set('cpu-price', raw.price);
+        set('cpu-socket', raw.socket);
+
+        // Simd checkboxes
+        if (raw.simd) {
+            document.querySelectorAll('.simd-check').forEach(cb => {
+                cb.checked = raw.simd.some(s => s.name === cb.value);
+            });
+        }
+
+        this.toggleIgpu();
+        this.updatePreview();
+    },
+
+    getTierLabel: function (score, isMulti) {
+        if (isMulti) {
+            if (score < 5000) return `<span style="color:#aaa;">[Entry Level]</span>`;
+            if (score < 15000) return `<span style="color:#00aaff;">[Mainstream]</span>`;
+            if (score < 30000) return `<span style="color:#bd00ff;">[High-End]</span>`;
+            if (score < 80000) return `<span style="color:#ffaa00;">[Enthusiast]</span>`;
             return `<span style="color:#ff4444; font-weight:bold;">[HPC / Server]</span>`;
         } else {
-            if(score < 800) return `<span style="color:#aaa;">[Sluggish]</span>`;
-            if(score < 1500) return `<span style="color:#00aaff;">[Capable]</span>`;
-            if(score < 2200) return `<span style="color:#bd00ff;">[Gaming Tier]</span>`;
+            if (score < 800) return `<span style="color:#aaa;">[Sluggish]</span>`;
+            if (score < 1500) return `<span style="color:#00aaff;">[Capable]</span>`;
+            if (score < 2200) return `<span style="color:#bd00ff;">[Gaming Tier]</span>`;
             return `<span style="color:#ffaa00; font-weight:bold;">[Flagship ST]</span>`;
         }
     },
 
     // --- 3. PHYSICS & BENCHMARKING (V9.1 ENGINE) ---
-    scrapeData: function() {
+    scrapeData: function () {
         const getVal = (id, isFloat) => {
             const el = document.getElementById(id);
-            return el ? (isFloat ? parseFloat(el.value)||0 : parseInt(el.value)||0) : 0;
+            return el ? (isFloat ? parseFloat(el.value) || 0 : parseInt(el.value) || 0) : 0;
         };
         const igpuOn = document.getElementById('igpu-enable') ? document.getElementById('igpu-enable').checked : false;
 
@@ -294,20 +340,20 @@ window.cpu = {
             name: document.getElementById('cpu-name') ? document.getElementById('cpu-name').value : "Unknown",
             segment: document.getElementById('cpu-segment') ? document.getElementById('cpu-segment').value : "Desktop",
             arch: document.getElementById('cpu-arch') ? document.getElementById('cpu-arch').value : "Generic",
-            
+
             fab: getVal('cpu-fab', true),
-            
+
             pCores: getVal('p-core-count'),
             pBase: getVal('p-base', true),
             pAllCore: getVal('p-allcore', true),
             pTurbo: getVal('p-turbo', true),
-            
+
             eCores: getVal('e-core-count'),
             eBase: getVal('e-base', true),
             eAllCore: getVal('e-allcore', true),
             eTurbo: getVal('e-turbo', true),
             eRatio: getVal('e-ratio', true),
-            
+
             threads: getVal('total-threads'),
             ipc: getVal('cpu-ipc', true),
             l3: getVal('l3-cache'),
@@ -315,7 +361,7 @@ window.cpu = {
             pl2: getVal('cpu-pl2'),
             memChannels: getVal('mem-channels'),
             pcie: getVal('pcie-lanes'),
-            
+
             igpuEnabled: igpuOn,
             igpuCus: igpuOn ? getVal('igpu-cus') : 0,
             igpuClock: igpuOn ? getVal('igpu-clock', true) : 0,
@@ -324,11 +370,11 @@ window.cpu = {
             aiClock: getVal('npu-clock', true),
             aiOps: getVal('npu-ops'),
             dedicatedAI: document.getElementById('dedicated-ai') ? document.getElementById('dedicated-ai').checked : false,
-            
+
             year: getVal('cpu-year'),
             price: getVal('cpu-price', true),
             socket: document.getElementById('cpu-socket') ? document.getElementById('cpu-socket').value : "Custom",
-            
+
             simd: Array.from(document.querySelectorAll('.simd-check:checked')).map(cb => {
                 const def = this.simdInstructions.find(s => s.name === cb.value);
                 return { name: cb.value, boost: def ? def.boost : 1.0 };
@@ -336,52 +382,52 @@ window.cpu = {
         };
     },
 
-    runPhysicsSimulation: function(d) {
+    runPhysicsSimulation: function (d) {
         const totalCores = d.pCores + d.eCores;
-        if(totalCores === 0) return { singleScore:0, multiScore:0, aiScore:0, igpuScore:0, burstPwrDraw:0, sustainedPwrDraw:0, yieldRate:0, estCost:0, dieArea:0 };
+        if (totalCores === 0) return { singleScore: 0, multiScore: 0, aiScore: 0, igpuScore: 0, burstPwrDraw: 0, sustainedPwrDraw: 0, yieldRate: 0, estCost: 0, dieArea: 0 };
 
         // 1. Lithography & Area Cost Model
-        const lithoFactor = Math.sqrt(14 / Math.max(d.fab, 1)); 
+        const lithoFactor = Math.sqrt(14 / Math.max(d.fab, 1));
         const baseArea = (d.pCores * 4) + (d.eCores * 1.5) + (d.l3 * 0.4) + (d.igpuCus * 1.5) + (d.memChannels * 4) + (d.pcie * 0.2) + 10;
         const dieArea = baseArea / lithoFactor;
 
-        const defectRate = dieArea / 500; 
+        const defectRate = dieArea / 500;
         const yieldRate = Math.exp(-defectRate);
-        const waferCost = 3000 * lithoFactor; 
+        const waferCost = 3000 * lithoFactor;
         const chipsPerWafer = Math.floor(70000 / dieArea);
         const estCostPerChip = waferCost / Math.max(1, (chipsPerWafer * yieldRate));
 
         // 2. Power & Uncore
         let uncoreWatts = (10 + (totalCores * 0.4) + (d.memChannels * 1.5) + (d.pcie * 0.1)) / lithoFactor;
-        if(d.igpuEnabled) uncoreWatts += (d.igpuCus * d.igpuClock * 0.5) / lithoFactor;
+        if (d.igpuEnabled) uncoreWatts += (d.igpuCus * d.igpuClock * 0.5) / lithoFactor;
 
         // Cubic power scaling relative to clock frequency
         const pWattPerGhz = 0.12 / lithoFactor;
         const eWattPerGhz = 0.035 / lithoFactor;
 
         let rawSustainedPower = uncoreWatts;
-        if(d.pCores>0) rawSustainedPower += d.pCores * Math.pow(d.pAllCore, 3) * pWattPerGhz;
-        if(d.eCores>0) rawSustainedPower += d.eCores * Math.pow(d.eAllCore, 3) * eWattPerGhz;
+        if (d.pCores > 0) rawSustainedPower += d.pCores * Math.pow(d.pAllCore, 3) * pWattPerGhz;
+        if (d.eCores > 0) rawSustainedPower += d.eCores * Math.pow(d.eAllCore, 3) * eWattPerGhz;
 
         let rawBurstPower = uncoreWatts;
-        if(d.pCores>0) rawBurstPower += 2 * Math.pow(d.pTurbo, 3) * pWattPerGhz; // Burst usually on 1-2 cores
+        if (d.pCores > 0) rawBurstPower += 2 * Math.pow(d.pTurbo, 3) * pWattPerGhz; // Burst usually on 1-2 cores
 
         // Thermal/Power Throttling
         let sustainedThrottle = d.pl1 / Math.max(rawSustainedPower, 1);
-        if(sustainedThrottle > 1.0) sustainedThrottle = 1.0;
-        
+        if (sustainedThrottle > 1.0) sustainedThrottle = 1.0;
+
         let burstThrottle = d.pl2 / Math.max(rawBurstPower, 1);
-        if(burstThrottle > 1.0) burstThrottle = 1.0;
+        if (burstThrottle > 1.0) burstThrottle = 1.0;
 
         const multiPClock = d.pAllCore * sustainedThrottle;
         const multiEClock = d.eAllCore * sustainedThrottle;
-        const singlePClock = d.pTurbo * burstThrottle; 
+        const singlePClock = d.pTurbo * burstThrottle;
 
         // 3. Bottlenecks (Memory & Scheduling)
-        const memBandwidth = d.memChannels * 50; 
+        const memBandwidth = d.memChannels * 50;
         const requiredBandwidth = (d.pCores * multiPClock + d.eCores * multiEClock) * 1.5;
         let memBottleneck = memBandwidth / Math.max(requiredBandwidth, 1);
-        if(memBottleneck > 1.0) memBottleneck = 1.0;
+        if (memBottleneck > 1.0) memBottleneck = 1.0;
         const memBonus = 0.5 + (0.5 * Math.pow(memBottleneck, 0.5));
 
         // Non-Linear Core Scaling (Diminishing returns for massive core counts)
@@ -410,16 +456,16 @@ window.cpu = {
         }
 
         let rawMulti = 0;
-        if(d.pCores>0) rawMulti += (d.pCores * multiPClock);
-        if(d.eCores>0) rawMulti += (d.eCores * multiEClock * d.eRatio);
-        
+        if (d.pCores > 0) rawMulti += (d.pCores * multiPClock);
+        if (d.eCores > 0) rawMulti += (d.eCores * multiEClock * d.eRatio);
+
         let multiScore = rawMulti * d.ipc * smtBonus * cacheFactor * simdMax * memBonus * coreScalingPenalty * MC_NORM;
 
         // Aux Scores
-        let aiScore = (d.aiCores * d.aiOps * d.aiClock) / 10; 
+        let aiScore = (d.aiCores * d.aiOps * d.aiClock) / 10;
         if (d.dedicatedAI) aiScore *= 1.5;
 
-        let igpuScore = d.igpuEnabled ? (d.igpuCus * d.igpuClock * 15 * (d.ipc/1.5)) : 0;
+        let igpuScore = d.igpuEnabled ? (d.igpuCus * d.igpuClock * 15 * (d.ipc / 1.5)) : 0;
 
         return {
             singleScore: Math.floor(singleScore),
@@ -434,7 +480,7 @@ window.cpu = {
         };
     },
 
-    updatePreview: function() {
+    updatePreview: function () {
         const d = this.scrapeData();
         const res = this.runPhysicsSimulation(d);
 
@@ -442,7 +488,7 @@ window.cpu = {
         if (previewList) {
             const pwrPct = Math.min(100, (res.sustainedPwrDraw / d.pl1) * 100);
             const pwrColor = pwrPct > 95 ? '#ff1744' : (pwrPct > 80 ? '#ffaa00' : '#00e676');
-            
+
             const effScore = d.pl1 > 0 ? (res.multiScore / d.pl1).toFixed(0) : 0;
             const margin = d.price - res.estCost;
             const marginColor = margin > 0 ? '#00e676' : '#ff1744';
@@ -458,7 +504,7 @@ window.cpu = {
                 </li>
             `;
 
-            if(d.igpuEnabled) {
+            if (d.igpuEnabled) {
                 html += `<li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>iGPU Score:</span> <b style="color:#76b900">${res.igpuScore} pts</b></li>`;
             }
 
@@ -490,14 +536,14 @@ window.cpu = {
     },
 
     // --- 4. DATABASE & SAVE LOGIC ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-lineup-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const activeCPUs = db.inventory.filter(i => i.type === 'CPU' && i.active === true);
-        
-        if(activeCPUs.length === 0) {
+
+        if (activeCPUs.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:20px;">No active CPUs currently on the market.</div>`;
             return;
         }
@@ -505,27 +551,33 @@ window.cpu = {
         container.innerHTML = activeCPUs.map(cpu => {
             const specs = cpu.specs || {};
             const scoreStr = specs.Score || "N/A";
-            
+
             return `
             <div class="panel" style="padding:15px; display:flex; flex-direction:column; gap:5px;">
-                <div style="font-weight:800; color:var(--accent); font-size:1rem;">${cpu.name} <span style="font-size:0.6rem; color:#888; border:1px solid #444; padding:2px 4px; border-radius:3px; margin-left:4px;">${cpu.raw?.segment||'CPU'}</span></div>
+                <div style="font-weight:800; color:var(--accent); font-size:1rem;">${cpu.name} <span style="font-size:0.6rem; color:#888; border:1px solid #444; padding:2px 4px; border-radius:3px; margin-left:4px;">${cpu.raw?.segment || 'CPU'}</span></div>
                 <div style="font-size:0.75rem; color:#aaa; font-family:var(--font-mono);">
                     <div>${specs.Socket || 'N/A'} | ${specs.Cores || 'N/A'}</div>
                     <div style="margin-top:4px;">${scoreStr}</div>
                     <div style="margin-top:4px; color:#fff; font-size:0.9rem;">$${cpu.raw?.price || 0}</div>
                 </div>
                 
-                <button onclick="window.sys.discontinue(${cpu.id})" 
-                    style="margin-top:10px; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:10px;">
+                    <button onclick="window.cloneToArchitect(${cpu.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${cpu.id})" 
+                        style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
-        if(!window.sys || !window.sys.saveDesign) {
+    saveSystem: function () {
+        if (!window.sys || !window.sys.saveDesign) {
             alert("Error: Save system (save.js) not found!");
             return;
         }
@@ -535,7 +587,7 @@ window.cpu = {
 
         const finalObject = {
             name: data.name,
-            specs: { 
+            specs: {
                 "Segment": data.segment,
                 "Socket": data.socket,
                 "Cores": `${data.pCores}P + ${data.eCores}E`,

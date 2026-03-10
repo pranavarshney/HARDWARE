@@ -29,7 +29,7 @@ window.display = {
     },
 
     // --- 2. UI RENDERER ---
-    render: function(container) {
+    render: function (container) {
         if (!container) return;
 
         const currentYear = new Date().getFullYear();
@@ -38,9 +38,9 @@ window.display = {
             <div class="architect-container">
                 
                 <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    ${Object.keys(this.presets).map(k => 
-                        `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem; border-radius:4px;" onclick="window.display.loadPreset('${k}')">${k.split(' ')[0]} ${k.split(' ')[1] || ''}</button>`
-                    ).join('')}
+                    ${Object.keys(this.presets).map(k =>
+            `<button style="background:#333; color:#fff; border:1px solid #555; padding:5px 10px; cursor:pointer; font-size:0.8rem; border-radius:4px;" onclick="window.display.loadPreset('${k}')">${k.split(' ')[0]} ${k.split(' ')[1] || ''}</button>`
+        ).join('')}
                 </div>
 
                 <div class="panel">
@@ -193,16 +193,16 @@ window.display = {
             el.addEventListener('input', () => this.updatePhysics());
             el.addEventListener('change', () => this.updatePhysics());
         });
-        
+
         this.updatePhysics();
         this.refreshLineup();
     },
 
-    loadPreset: function(name) {
+    loadPreset: function (name) {
         const p = this.presets[name];
-        if(!p) return;
-        
-        const set = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+        if (!p) return;
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
 
         set('disp-name', name.split(' (')[0]);
         set('disp-type', p.type);
@@ -215,17 +215,40 @@ window.display = {
         set('disp-contrast', p.contrast);
         set('disp-bits', p.bits);
         set('disp-price', p.price);
-        
-        if(p.gamut) set('disp-gamut', p.gamut);
-        if(p.port) set('disp-port', p.port);
-        if(p.sync) set('disp-sync', p.sync);
-        if(p.curve) set('disp-curve', p.curve);
-        
+
+        if (p.gamut) set('disp-gamut', p.gamut);
+        if (p.port) set('disp-port', p.port);
+        if (p.sync) set('disp-sync', p.sync);
+        if (p.curve) set('disp-curve', p.curve);
+
+        this.updatePhysics();
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+
+        set('disp-name', raw.name);
+        set('disp-type', raw.type);
+        set('disp-size', raw.size);
+        set('disp-w', raw.w);
+        set('disp-h', raw.h);
+        set('disp-hz', raw.hz);
+        set('disp-resp', raw.resp);
+        set('disp-nits', raw.nits);
+        set('disp-contrast', raw.contrast);
+        set('disp-bits', raw.bits);
+        set('disp-price', raw.price);
+        set('disp-year', raw.year);
+        set('disp-gamut', raw.gamut);
+        set('disp-port', raw.port);
+        set('disp-sync', raw.sync);
+        set('disp-curve', raw.curve);
+
         this.updatePhysics();
     },
 
     // --- 3. PHYSICS ENGINE V3.0 ---
-    scrapeData: function() {
+    scrapeData: function () {
         // Safe getter that doesn't accidentally coerce strings to numbers improperly
         const getNum = (id) => { const el = document.getElementById(id); return parseFloat(el.value) || 0; };
         const getStr = (id) => { const el = document.getElementById(id); return el.value; };
@@ -250,19 +273,19 @@ window.display = {
         };
     },
 
-    getAspectRatio: function(w, h) {
+    getAspectRatio: function (w, h) {
         const ratio = w / h;
-        if(ratio >= 3.5) return "32:9 Super Ultrawide";
-        if(ratio >= 2.3) return "21:9 Ultrawide";
-        if(ratio >= 1.7) return "16:9 Standard";
-        if(ratio >= 1.5) return "16:10 Productivity";
-        if(ratio >= 1.3) return "4:3 Classic";
+        if (ratio >= 3.5) return "32:9 Super Ultrawide";
+        if (ratio >= 2.3) return "21:9 Ultrawide";
+        if (ratio >= 1.7) return "16:9 Standard";
+        if (ratio >= 1.5) return "16:10 Productivity";
+        if (ratio >= 1.3) return "4:3 Classic";
         return "Custom Ratio";
     },
 
-    updatePhysics: function() {
+    updatePhysics: function () {
         const d = this.scrapeData();
-        
+
         // 1. PANEL SPECIFIC OVERRIDES & CONSTRAINTS
         let actualResp = d.resp;
         let viewAngle = "178°/178°";
@@ -297,7 +320,7 @@ window.display = {
         // 3. MOTION CLARITY
         const persistence = 1000 / d.hz;
         const totalBlur = persistence + (actualResp * 1.5);
-        
+
         // 4. HDR RATING
         let hdrBadge = "SDR";
         let hdrColor = "#888";
@@ -327,33 +350,33 @@ window.display = {
         // 5. POWER CONSUMPTION MODEL
         // Formula: Proportional to Size^2 * Nits * Panel Efficiency Constant
         let watts = ((d.size * d.size) * (d.nits / 100) * powerEff) / 15;
-        if(watts < 10) watts = 10;
+        if (watts < 10) watts = 10;
 
         // 6. SUBSCORES (Gaming, Creative, Office)
-        const ppi = Math.sqrt(d.w*d.w + d.h*d.h) / Math.max(d.size, 1);
+        const ppi = Math.sqrt(d.w * d.w + d.h * d.h) / Math.max(d.size, 1);
         const aspect = this.getAspectRatio(d.w, d.h);
 
         // Gamut multiplier
         let gamutMult = 1.0;
-        if(d.gamut.includes('DCI-P3')) gamutMult = 1.5;
-        if(d.gamut.includes('Rec.2020')) gamutMult = 2.0;
-        if(d.gamut.includes('70%')) gamutMult = 0.5;
+        if (d.gamut.includes('DCI-P3')) gamutMult = 1.5;
+        if (d.gamut.includes('Rec.2020')) gamutMult = 2.0;
+        if (d.gamut.includes('70%')) gamutMult = 0.5;
 
         // A. Gaming Score
         let syncBonus = d.sync !== 'None' ? 200 : 0;
         let gamingScore = (d.hz * 10) + (2000 / Math.max(totalBlur, 0.1)) + syncBonus;
-        if(d.curve !== 'Flat') gamingScore += 100; // Gamers like curves
-        if(isBottlenecked) gamingScore *= 0.5; // Huge penalty if port limits refresh rate
+        if (d.curve !== 'Flat') gamingScore += 100; // Gamers like curves
+        if (isBottlenecked) gamingScore *= 0.5; // Huge penalty if port limits refresh rate
 
         // B. Creative Score
         let creativeScore = (ppi * 5) + (hdrScore * 5) + (Math.log10(Math.max(1, d.contrast)) * 100);
         creativeScore *= gamutMult * colorPenalty;
-        if(d.bits >= 10) creativeScore *= 1.2;
+        if (d.bits >= 10) creativeScore *= 1.2;
 
         // C. Office/General Score
         let officeScore = (ppi * 8) + (d.nits * 0.5);
-        if(d.size >= 27 && d.size <= 34) officeScore += 500; // Sweet spot for productivity
-        if(watts > 100) officeScore -= (watts - 100) * 2; // Penalty for power hogs
+        if (d.size >= 27 && d.size <= 34) officeScore += 500; // Sweet spot for productivity
+        if (watts > 100) officeScore -= (watts - 100) * 2; // Penalty for power hogs
 
         // Combine for legacy visual score (weighted)
         let compositeScore = Math.floor((gamingScore * 0.4) + (creativeScore * 0.4) + (officeScore * 0.2));
@@ -362,7 +385,7 @@ window.display = {
         const display = document.getElementById('disp-live-stats');
         if (display) {
             let bwHtml = `<b>${rawBandwidth.toFixed(1)} Gbps</b> / <span style="color:#aaa;">${portLimit} Gbps (${d.port})</span>`;
-            if(isBottlenecked) bwHtml = `<b style="color:#ff1744;">${rawBandwidth.toFixed(1)} Gbps (PORT BOTTLENECK!)</b>`;
+            if (isBottlenecked) bwHtml = `<b style="color:#ff1744;">${rawBandwidth.toFixed(1)} Gbps (PORT BOTTLENECK!)</b>`;
 
             display.innerHTML = `
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Aspect / PPI:</span> <b>${aspect} | ${Math.floor(ppi)} PPI</b></li>
@@ -379,19 +402,19 @@ window.display = {
                 </li>
             `;
         }
-        
+
         return { compositeScore, gamingScore, creativeScore, officeScore, hdrBadge, isBottlenecked };
     },
 
     // --- 4. DATABASE & SAVE LOGIC ---
-    refreshLineup: function() {
+    refreshLineup: function () {
         const container = document.getElementById('active-disp-list');
-        if(!container || !window.sys) return;
+        if (!container || !window.sys) return;
 
         const db = window.sys.load();
         const activeDisp = db.inventory.filter(i => i.type === 'Display' && i.active === true);
 
-        if(activeDisp.length === 0) {
+        if (activeDisp.length === 0) {
             container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:20px;">No active Displays on the market.</div>`;
             return;
         }
@@ -408,17 +431,23 @@ window.display = {
                     <div style="margin-top:6px; color:#fff; font-size:0.9rem;">$${disp.raw?.price || disp.price || 0}</div>
                 </div>
                 
-                <button onclick="window.sys.discontinue(${disp.id})" 
-                    style="margin-top:10px; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                    DISCONTINUE
-                </button>
+                <div style="display:flex; gap:5px; margin-top:10px;">
+                    <button onclick="window.cloneToArchitect(${disp.id})" 
+                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        CLONE
+                    </button>
+                    <button onclick="window.sys.discontinue(${disp.id})" 
+                        style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
+                        DISCONTINUE
+                    </button>
+                </div>
             </div>
             `;
         }).join('');
     },
 
-    saveSystem: function() {
-        if(!window.sys || !window.sys.saveDesign) {
+    saveSystem: function () {
+        if (!window.sys || !window.sys.saveDesign) {
             alert("Error: Save system not found!");
             return;
         }
@@ -432,7 +461,7 @@ window.display = {
 
         window.sys.saveDesign('Display', {
             name: data.name,
-            
+
             // Display Specs for Storefront
             specs: {
                 "Panel": `${data.size}" ${data.type} (${data.curve})`,
@@ -443,7 +472,7 @@ window.display = {
                 "Sync": data.sync,
                 "Score": results.compositeScore
             },
-            
+
             // Raw Data & Subscores
             price: data.price,
             year: data.year,
