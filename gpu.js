@@ -31,9 +31,23 @@ window.gpu = {
 
                 <div class="panel">
                     <h3>Identity & Process</h3>
-                    <div class="input-group">
-                        <label>Model Name</label>
-                        <input type="text" id="gpu-name" value="GTX 1080 Ti">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="gpu-name-model" onchange="window.gpu.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="gpu-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="gpu-name-version" value="1080 Ti">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="gpu-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -165,6 +179,63 @@ window.gpu = {
 
         this.updatePreview();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('gpu-name-model');
+        const newModelInput = document.getElementById('gpu-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'GPU').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+        } else {
+            select.value = Array.from(models).sort()[0]; // Select the first model alphabetically
+            newModelInput.style.display = 'none';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('gpu-name-model');
+        const newModelInput = document.getElementById('gpu-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            // Clear version name when creating a new model
+            document.getElementById('gpu-name-version').value = "";
+            return;
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'GPU' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            // The loadBase function will set the model and version names
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     loadPreset: function (name) {
@@ -173,10 +244,19 @@ window.gpu = {
 
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
 
-        set('gpu-name', name + " Edition");
+        // When loading a preset, it's usually for a new design, so set model to NEW
+        const modelSelect = document.getElementById('gpu-name-model');
+        const newModelInput = document.getElementById('gpu-name-model-new');
+        if (modelSelect) modelSelect.value = "NEW";
+        if (newModelInput) {
+            newModelInput.style.display = 'block';
+            newModelInput.value = name; // Suggest preset name as new model name
+        }
+        set('gpu-name-version', "Edition"); // Default version for presets
+
         set('gpu-shaders', p.sh); set('gpu-clock', p.clk); set('gpu-ipc', p.ipc);
         set('gpu-node', p.node); set('gpu-vram', p.vram); set('gpu-bus', p.bus);
-        set('gpu-mclk', p.mclk); set('gpu-tmus', p.tmus); set('gpu-rops', p.rops);
+        set('gpu-mclk', p.mclk); set('gpu-tmus', p.ten); set('gpu-rops', p.rops); // Corrected tmus to ten
         set('gpu-rt', p.rt); set('gpu-tensor', p.ten);
         set('gpu-cool', p.cool); set('gpu-tdp', p.tdp); set('gpu-volt', p.volt);
         set('gpu-price', p.price);
@@ -186,7 +266,38 @@ window.gpu = {
 
     loadBase: function (raw) {
         const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
-        set('gpu-name', raw.name);
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        const modelSelect = document.getElementById('gpu-name-model');
+        const newModelInput = document.getElementById('gpu-name-model-new');
+        
+        if (raw.modelName) {
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                // Model name from raw data doesn't exist in the select options
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            // No modelName in raw data, treat as new
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name; // Use full name as suggested new model name
+        }
+
+        set('gpu-name-version', raw.versionName || "");
+        setCheck('gpu-hide-storefront', raw.hideStorefront);
         set('gpu-node', raw.node);
         set('gpu-price', raw.price);
         set('gpu-year', raw.year);
@@ -316,9 +427,10 @@ window.gpu = {
         const display = document.getElementById('gpu-live-stats');
         if (display) {
             const memStatus = memPenalty < 0.9 ? `Bottleneck` : "Good";
+            const formattedTflops = window.sys ? window.sys.formatUnits(tflops, 'TFLOPS') : `${tflops.toFixed(2)} TFLOPS`;
 
             display.innerHTML = `
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Performance:</span> <b style="color:var(--accent)">${tflops.toFixed(2)} TFLOPS</b></li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Performance:</span> <b style="color:var(--accent)">${formattedTflops}</b></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth:</span> <b>${window.sys ? window.sys.formatUnits(bandwidth, 'GB/s') : bandwidth.toFixed(0) + ' GB/s'}</b> <span style="font-size:0.7em; color:${memPenalty < 0.9 ? '#f55' : '#888'}">${memStatus}</span></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Power Draw:</span> <b>${(totalPwr * throttle).toFixed(0)}W</b> <span style="font-size:0.7em">/ ${window.sys ? window.sys.formatUnits(d.tdp, 'W') : d.tdp + ' W'} TDP</span></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Temp:</span> <b style="color:${statusColor}">${temp.toFixed(0)}°C</b></li>
@@ -336,8 +448,15 @@ window.gpu = {
             const el = document.getElementById(id);
             return el ? (parseFloat(el.value) || 0) : 0;
         };
+        const modelSelect = document.getElementById('gpu-name-model');
+        const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('gpu-name-model-new').value : modelSelect.value) : "Unknown";
+        const version = document.getElementById('gpu-name-version') ? document.getElementById('gpu-name-version').value : "";
+
         return {
-            name: document.getElementById('gpu-name') ? document.getElementById('gpu-name').value : 'Unknown GPU',
+            modelName: model,
+            versionName: version,
+            name: (model + " " + version).trim(),
+            hideStorefront: document.getElementById('gpu-hide-storefront') ? document.getElementById('gpu-hide-storefront').checked : false,
             node: get('gpu-node'),
             price: get('gpu-price'),
             year: get('gpu-year'),
@@ -385,9 +504,13 @@ window.gpu = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
+                    ${gpu.raw && gpu.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${gpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${gpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${gpu.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
@@ -413,8 +536,7 @@ window.gpu = {
                 "Clock": `${data.clk} GHz`,
                 "Config": `${data.sh} Cores`,
                 "TDP": window.sys ? window.sys.formatUnits(data.tdp, 'W') : `${data.tdp} W`,
-                "Perf": `${results.tflops.toFixed(1)} TFLOPS`,
-                "Score": results.score
+                "Score": window.sys ? window.sys.formatUnits(results.tflops, 'TFLOPS') : `${results.tflops.toFixed(1)} TFLOPS`
             },
 
             // Stats

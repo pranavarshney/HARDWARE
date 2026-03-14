@@ -41,9 +41,23 @@ window.desktop = {
                 
                 <div class="panel">
                     <h3>System Identity</h3>
-                    <div class="input-group">
-                        <label>System Name</label>
-                        <input type="text" id="sys-name" value="Titanium X1">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="sys-name-model" onchange="window.desktop.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="sys-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="sys-name-version" value="X1">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="sys-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -148,11 +162,112 @@ window.desktop = {
 
         this.updatePhysics();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('sys-name-model');
+        const newModelInput = document.getElementById('sys-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'Desktop').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            document.getElementById('sys-name-model-new').style.display = 'block';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('sys-name-model');
+        const newModelInput = document.getElementById('sys-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            return;
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'Desktop' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            modelSelect.value = modelName; // Ensure the select remains on the chosen model
+            document.getElementById('sys-name-version').value = ""; // Clear version for new clone
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     // --- HELPER: Render Simple Options ---
     renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        const modelSelect = document.getElementById('sys-name-model');
+        const newModelInput = document.getElementById('sys-name-model-new');
+        
+        if (raw.modelName) {
+            // Check if the model exists in the dropdown (which we just populated)
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name; // Fallback to raw.name if modelName is missing
+        }
+
+        set('sys-name-version', raw.versionName || "");
+        setCheck('sys-hide-storefront', raw.hideStorefront);
+        set('sys-year', raw.year);
+        set('sys-price', raw.price);
+        if (raw.case) set('sys-case', raw.case);
+        if (raw.psu) set('sys-psu', raw.psu);
+        if (raw.cool) set('sys-cool', raw.cool);
+        
+        if (raw.components) {
+            set('sys-cpu', raw.components.cpu);
+            set('sys-gpu', raw.components.gpu);
+            set('sys-mobo', raw.components.mobo);
+            set('sys-ram', raw.components.ram);
+            set('sys-storage', raw.components.storage);
+        }
+        this.updatePhysics();
     },
 
     // --- 3. INVENTORY LINKING ---
@@ -328,10 +443,23 @@ window.desktop = {
     },
 
     scrapeData: function () {
+        let modelName = document.getElementById('sys-name-model').value;
+        if (modelName === "NEW") {
+            modelName = document.getElementById('sys-name-model-new').value || "Custom";
+        }
+        const versionName = document.getElementById('sys-name-version').value;
+        const fullName = `${modelName} ${versionName}`.trim();
+
         return {
-            name: document.getElementById('sys-name').value,
+            modelName: modelName,
+            versionName: versionName,
+            name: fullName,
+            hideStorefront: document.getElementById('sys-hide-storefront') ? document.getElementById('sys-hide-storefront').checked : false,
             year: parseFloat(document.getElementById('sys-year').value),
-            price: parseFloat(document.getElementById('sys-price').value)
+            price: parseFloat(document.getElementById('sys-price').value),
+            case: document.getElementById('sys-case') ? document.getElementById('sys-case').value : '',
+            psu: document.getElementById('sys-psu') ? document.getElementById('sys-psu').value : '',
+            cool: document.getElementById('sys-cool') ? document.getElementById('sys-cool').value : ''
         };
     },
 
@@ -366,9 +494,13 @@ window.desktop = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
+                    ${pc.raw && pc.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${pc.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${pc.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${pc.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
@@ -409,7 +541,8 @@ window.desktop = {
                 ram: p.ram?.id,
                 mobo: p.mobo?.id,
                 storage: p.sto?.id
-            }
+            },
+            ...meta
         });
 
         this.refreshLineup();

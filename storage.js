@@ -44,9 +44,16 @@ window.storage = {
 
                 <div class="panel">
                     <h3>Identity & Type</h3>
-                    <div class="input-group">
-                        <label>Model Name</label>
-                        <input type="text" id="sto-name" value="Barracuda X">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <input type="text" id="sto-name" value="Barracuda X">
+                        </div>
+                        <div class="input-group" style="display:flex; align-items:flex-end;">
+                            <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer; margin-bottom: 8px;">
+                                <input type="checkbox" id="sto-hide-storefront"> Hide in Storefront
+                            </label>
+                        </div>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -218,7 +225,9 @@ window.storage = {
 
     loadBase: function (raw) {
         const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
         set('sto-name', raw.name);
+        setCheck('sto-hide-storefront', raw.hideStorefront);
         set('sto-type', raw.type);
         set('sto-inter', raw.inter);
         set('sto-cap', raw.cap);
@@ -305,6 +314,7 @@ window.storage = {
 
         return {
             name: document.getElementById('sto-name').value,
+            hideStorefront: document.getElementById('sto-hide-storefront') ? document.getElementById('sto-hide-storefront').checked : false,
             type: document.getElementById('sto-type').value,
             inter: document.getElementById('sto-inter').value,
             cap: get('sto-cap'),
@@ -345,9 +355,13 @@ window.storage = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
+                    ${drive.raw && drive.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${drive.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${drive.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${drive.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>

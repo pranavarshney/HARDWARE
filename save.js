@@ -27,6 +27,7 @@ window.sys = {
             else if (val >= 1000) { val = val / 1000; unit = 'GB/s'; }
         } else if (baseUnit === 'GB/s' || baseUnit === 'GBps') {
             if (val >= 1000) { val = val / 1000; unit = 'TB/s'; }
+            else if (val < 1 && val > 0) { val = val * 1000; unit = 'MB/s'; }
         } else if (baseUnit === 'MB') {
             if (val >= 1000000) { val = val / 1000000; unit = 'TB'; }
             else if (val >= 1000) { val = val / 1000; unit = 'GB'; }
@@ -45,6 +46,11 @@ window.sys = {
             if (val >= 1000000000000000) { val = val / 1000000000000000; unit = 'PFLOPS'; }
             else if (val >= 1000000000000) { val = val / 1000000000000; unit = 'TFLOPS'; }
             else if (val >= 1000000000) { val = val / 1000000000; unit = 'GFLOPS'; }
+            else if (val >= 1000000) { val = val / 1000000; unit = 'MFLOPS'; }
+        } else if (baseUnit === 'TFLOPS') {
+            if (val >= 1000) { val = val / 1000; unit = 'PFLOPS'; }
+            else if (val < 1 && val >= 0.001) { val = val * 1000; unit = 'GFLOPS'; }
+            else if (val < 0.001 && val > 0) { val = val * 1000000; unit = 'MFLOPS'; }
         }
 
         // Format to max 2 decimal places, but drop .00
@@ -112,6 +118,29 @@ window.sys = {
         }
     },
 
+    toggleHide: function (id) {
+        const db = this.load();
+        const item = db.inventory.find(i => i.id === id);
+
+        if (item && item.raw) {
+            item.raw.hideStorefront = !item.raw.hideStorefront;
+            this.save(db);
+
+            const status = item.raw.hideStorefront ? "HIDDEN from" : "VISIBLE in";
+            if (window.showToast) window.showToast(`${item.name} is now ${status} Storefront.`, 'info');
+
+            // Refresh views if visible
+            if (window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
+            if (window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
+
+            // Refresh specific architect view
+            const moduleName = item.type.toLowerCase();
+            if (window[moduleName] && window[moduleName].refreshLineup) {
+                window[moduleName].refreshLineup();
+            }
+        }
+    },
+
     deleteDesign: function (id) {
         if (window.showConfirm) {
             window.showConfirm("Permanently delete this record? This cannot be undone.", () => {
@@ -132,6 +161,16 @@ window.sys = {
         if (window.showToast) window.showToast('Product record deleted.', 'error');
     },
 
+    startNewSave: function() {
+        if (window.showConfirm) {
+            window.showConfirm("WARNING: This will wipe your company and restart the game. Are you sure?", () => {
+                this.save({ inventory: [] });
+                if (window.showToast) window.showToast("Save file wiped. Starting fresh.", "success");
+                window.location.reload();
+            });
+        }
+    },
+
     // --- 3. EDIT SYSTEM ---
     openEditModal: function (id) {
         const db = this.load();
@@ -147,12 +186,26 @@ window.sys = {
         overlay.id = 'edit-modal-overlay';
         overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; z-index:10000;';
 
+        // Generate dynamic inputs for all specs
+        let specsHtml = '';
+        if (item.specs) {
+            specsHtml = `<div style="margin-top:15px; border-top:1px solid #333; padding-top:15px;">
+                <h4 style="color:var(--accent-secondary); margin-bottom:10px; font-size:0.9rem;">Technical Specifications</h4>
+                <p style="font-size: 0.75rem; color: #888; margin-bottom: 10px;">Warning: Modifying these will not change the benchmark physics, but will alter how it appears to customers.</p>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    ${Object.entries(item.specs).map(([key, val], index) => `
+                        <div class="input-group">
+                            <label>${key}</label>
+                            <input type="text" id="edit-spec-${index}" data-speckey="${key}" value="${val}">
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }
+
         overlay.innerHTML = `
-            <div class="confirm-dialog" style="transform: translateY(0); opacity: 1;">
-                <h3 style="color: var(--accent); border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">Edit Product Metadata</h3>
-                <p style="font-size: 0.8rem; color: #888; margin-bottom: 20px;">
-                    Hardware specifications cannot be altered post-launch. You may update the marketing data below.
-                </p>
+            <div class="confirm-dialog" style="transform: translateY(0); opacity: 1; max-height:80vh; overflow-y:auto; width:500px;">
+                <h3 style="color: var(--accent); border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">Edit Product Database</h3>
                 
                 <div class="input-group">
                     <label>Product Name</label>
@@ -169,14 +222,61 @@ window.sys = {
                         <input type="number" id="edit-price" value="${item.raw.price || 0}">
                     </div>
                 </div>
+                
+                ${specsHtml}
 
                 <div class="confirm-actions" style="margin-top: 20px;">
                     <button class="btn-cancel" onclick="document.getElementById('edit-modal-overlay').remove()">CANCEL</button>
+                    <button class="btn-action" style="background:#00aaff; color:#fff;" onclick="window.sys.saveAsNew(${item.id})">SAVE AS NEW</button>
                     <button class="btn-action" onclick="window.sys.saveEdit(${item.id})">SAVE CHANGES</button>
                 </div>
             </div>
         `;
         document.body.appendChild(overlay);
+    },
+
+    saveAsNew: function(id) {
+        const db = this.load();
+        const baseItem = db.inventory.find(i => i.id === id);
+        if (!baseItem) return;
+
+        const newName = document.getElementById('edit-name').value;
+        const newYear = parseInt(document.getElementById('edit-year').value) || 0;
+        const newPrice = parseFloat(document.getElementById('edit-price').value) || 0;
+
+        // Clone the item
+        const newItem = JSON.parse(JSON.stringify(baseItem));
+        newItem.id = Date.now();
+        newItem.name = newName;
+        newItem.year = newYear;
+        newItem.raw.name = newName;
+        newItem.raw.year = newYear;
+        newItem.raw.price = newPrice;
+        
+        // Apply spec changes safely
+        const specsContainer = document.getElementById('edit-modal-overlay');
+        const specInputs = specsContainer.querySelectorAll('input[id^="edit-spec-"]');
+        specInputs.forEach(input => {
+            const key = input.getAttribute('data-speckey');
+            if (key && newItem.specs[key] !== undefined) {
+                newItem.specs[key] = input.value;
+            }
+        });
+
+        db.inventory.push(newItem);
+        this.save(db);
+        document.getElementById('edit-modal-overlay').remove();
+
+        if (window.showToast) window.showToast('Product cloned and saved as new!', 'success');
+
+        // Re-render views
+        if (window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
+        if (window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
+
+        const moduleName = newItem.type.toLowerCase();
+        if (window[moduleName] && window[moduleName].refreshLineup) {
+            window[moduleName].refreshLineup();
+        }
     },
 
     saveEdit: function (id) {
@@ -188,12 +288,23 @@ window.sys = {
         const newYear = parseInt(document.getElementById('edit-year').value) || 0;
         const newPrice = parseFloat(document.getElementById('edit-price').value) || 0;
 
-        // Apply changes
+        // Apply base changes
         db.inventory[itemIndex].name = newName;
         db.inventory[itemIndex].year = newYear;
         db.inventory[itemIndex].raw.name = newName;
         db.inventory[itemIndex].raw.year = newYear;
         db.inventory[itemIndex].raw.price = newPrice;
+
+        // Apply spec changes safely
+        const specsContainer = document.getElementById('edit-modal-overlay');
+        const specInputs = specsContainer.querySelectorAll('input[id^="edit-spec-"]');
+
+        specInputs.forEach(input => {
+            const key = input.getAttribute('data-speckey');
+            if (key && db.inventory[itemIndex].specs[key] !== undefined) {
+                db.inventory[itemIndex].specs[key] = input.value;
+            }
+        });
 
         this.save(db);
         document.getElementById('edit-modal-overlay').remove();
@@ -208,6 +319,164 @@ window.sys = {
         if (window[moduleName] && window[moduleName].refreshLineup) {
             window[moduleName].refreshLineup();
         }
+    },
+
+    // --- DETAILS & COMPARE MODAL ---
+    openStorefrontDetails: function(id) {
+        const db = this.load();
+        const item = db.inventory.find(i => i.id === id);
+        if (!item) return;
+
+        // Remove existing overlay
+        const existing = document.getElementById('details-modal-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'details-modal-overlay';
+        overlay.className = 'details-modal-overlay';
+        overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+
+        // Format Specs
+        let specsHtml = '';
+        if (item.specs) {
+            specsHtml = Object.entries(item.specs).map(([key, val]) => {
+                return `<div class="spec-item"><div class="spec-label">${key}</div><div class="spec-value">${val}</div></div>`;
+            }).join('');
+        }
+
+        const typeColors = {
+            'CPU': '#00aaff', 'GPU': '#76b900', 'RAM': '#ffaa00', 'Storage': '#ff4444',
+            'Motherboard': '#a1a1aa', 'Camera': '#00ffff', 'Display': '#ff00ff',
+            'Desktop': '#bd00ff', 'Console': '#ff8800', 'Smartphone': '#00ffaa', 'Laptop': '#4488ff', 'Server': '#00ff88'
+        };
+        const color = typeColors[item.type] || 'var(--accent)';
+
+        overlay.innerHTML = `
+            <div class="details-modal-content confirm-dialog" style="max-height:85vh; overflow-y:auto; width:600px; transform: translateY(0); opacity: 1; border-top:4px solid ${color};">
+                <button onclick="document.getElementById('details-modal-overlay').remove()" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#cfcfcf; font-size:1.5rem; cursor:pointer;">&times;</button>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 20px;">
+                    <div>
+                        <div style="font-size:0.8rem; color:${color}; font-weight:bold; letter-spacing:1px; text-transform:uppercase; margin-bottom:5px;">${item.type} | ${item.year}</div>
+                        <h2 style="margin:0; font-size:1.8rem;">${item.name}</h2>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:1.5rem; font-weight:bold; color:#00e676;">$${item.raw && item.raw.price ? item.raw.price : 0}</div>
+                        <span style="font-size:0.75rem; color:#00e676; font-weight:bold; background:rgba(0,230,118,0.1); padding:4px 8px; border-radius:4px; border:1px solid rgba(0,230,118,0.3); display:inline-block; margin-top:5px;">IN STOCK</span>
+                    </div>
+                </div>
+
+                <h4 style="color:var(--accent-secondary); margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">Specifications</h4>
+                <div class="spec-grid">
+                    ${specsHtml || '<div style="color:#aaa; font-style:italic;">No specs recorded.</div>'}
+                </div>
+
+                <div style="margin-top: 25px; padding-top:15px; border-top:1px solid #333; display:flex; gap:10px; justify-content:center;">
+                    <button class="btn-action" style="background:#333; color:#fff; flex:1;" onclick="window.sys.openCompareModal(${item.id})">COMPARE WITH...</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    },
+
+    openCompareModal: function(baseId) {
+        const db = this.load();
+        const baseItem = db.inventory.find(i => i.id === baseId);
+        if (!baseItem) return;
+
+        // Get comparable items (same type, active)
+        const comparableItems = db.inventory.filter(i => i.type === baseItem.type && i.active && i.id !== baseId);
+
+        let dropdownHtml = '';
+        if (comparableItems.length === 0) {
+            dropdownHtml = `<option value="">No other active products to compare</option>`;
+        } else {
+            dropdownHtml = `<option value="">-- Select Product --</option>` + comparableItems.map(i => `<option value="${i.id}">${i.name} (${i.year}) - $${i.raw && i.raw.price ? i.raw.price : 0}</option>`).join('');
+        }
+
+        const detailsOverlay = document.getElementById('details-modal-overlay');
+        if (detailsOverlay) {
+             detailsOverlay.querySelector('.details-modal-content').innerHTML = `
+                <button onclick="window.sys.openStorefrontDetails(${baseId})" style="position:absolute; top:15px; left:15px; background:none; border:none; color:#888; font-size:1.5rem; cursor:pointer;">&larr;</button>
+                <button onclick="document.getElementById('details-modal-overlay').remove()" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#cfcfcf; font-size:1.5rem; cursor:pointer;">&times;</button>
+                
+                <h3 style="text-align:center; margin-bottom:20px; color:var(--accent);">Product Comparison</h3>
+                
+                <div style="display:flex; justify-content:space-between; margin-bottom:20px; gap:15px;">
+                    <div style="flex:1; text-align:center;">
+                        <div style="font-weight:bold; color:var(--text-main); font-size:1.2rem;">${baseItem.name}</div>
+                        <div style="color:#888; font-size:0.9rem;">Base Product</div>
+                    </div>
+                    <div style="flex:1; text-align:center;">
+                        <select id="compare-select" onchange="window.sys.renderCompareTable(${baseId}, this.value)" style="width:100%; padding:8px; background:#111; color:#fff; border:1px solid #444; border-radius:4px; font-size:1rem;">
+                            ${dropdownHtml}
+                        </select>
+                    </div>
+                </div>
+
+                <div id="compare-table-container" style="min-height:200px; max-height:50vh; overflow-y:auto;">
+                    <div style="text-align:center; color:#555; padding:40px 0; font-style:italic;">Select a product to compare.</div>
+                </div>
+             `;
+        }
+    },
+
+    renderCompareTable: function(baseId, compareId) {
+        if (!compareId) {
+            document.getElementById('compare-table-container').innerHTML = `<div style="text-align:center; color:#555; padding:40px 0; font-style:italic;">Select a product to compare.</div>`;
+            return;
+        }
+
+        const db = this.load();
+        const baseItem = db.inventory.find(i => i.id === baseId);
+        const compItem = db.inventory.find(i => i.id === parseInt(compareId));
+
+        if (!baseItem || !compItem) return;
+
+        let html = '<table class="compare-table" style="width:100%; border-collapse: collapse; text-align:center; font-size:0.9rem;">';
+        html += `<tr style="border-bottom: 2px solid #333; position:sticky; top:0; background:var(--bg-panel);"><th style="padding:10px; text-align:left; width:30%;">Metric</th><th style="padding:10px; width:35%;">${baseItem.name}</th><th style="padding:10px; width:35%;">${compItem.name}</th></tr>`;
+
+        const renderRow = (label, val1, val2, invertGood = false, neutral = false) => {
+             let match1 = String(val1).match(/-?\d+(\.\d+)?/);
+             let match2 = String(val2).match(/-?\d+(\.\d+)?/);
+             let num1 = match1 ? parseFloat(match1[0]) : NaN;
+             let num2 = match2 ? parseFloat(match2[0]) : NaN;
+             
+             let color1 = '', color2 = '';
+             let arrow1 = '', arrow2 = '';
+             if (!neutral && !isNaN(num1) && !isNaN(num2)) {
+                 if (num1 > num2) {
+                     color1 = invertGood ? '#ff4444' : '#00e676';
+                     color2 = invertGood ? '#00e676' : '#ff4444';
+                     arrow1 = invertGood ? ' &#9660;' : ' &#9650;';
+                 } else if (num2 > num1) {
+                     color1 = invertGood ? '#00e676' : '#ff4444';
+                     color2 = invertGood ? '#ff4444' : '#00e676';
+                     arrow2 = invertGood ? ' &#9660;' : ' &#9650;';
+                 }
+             }
+
+             return `<tr style="border-bottom:1px solid #222;">
+                <td style="padding:10px; text-align:left; color:#888;">${label}</td>
+                <td style="padding:10px; color:${color1 || '#ddd'}; font-weight:${color1 ? 'bold' : 'normal'};">${val1 !== undefined && val1 !== null ? val1 : 'N/A'}${arrow1}</td>
+                <td style="padding:10px; color:${color2 || '#ddd'}; font-weight:${color2 ? 'bold' : 'normal'};">${val2 !== undefined && val2 !== null ? val2 : 'N/A'}${arrow2}</td>
+             </tr>`;
+        };
+
+        html += renderRow('Release Year', baseItem.year, compItem.year, false, true);
+        html += renderRow('Price ($)', baseItem.raw?.price || 0, compItem.raw?.price || 0, true);
+        
+        html += `<tr><td colspan="3" style="padding:15px 10px 5px; text-align:left; font-weight:bold; color:var(--accent-secondary); font-size:0.85rem; text-transform:uppercase;">Specifications</td></tr>`;
+        const allSpecKeys = new Set([...Object.keys(baseItem.specs || {}), ...Object.keys(compItem.specs || {})]);
+        for (let key of Array.from(allSpecKeys)) {
+             let invert = false;
+             if (key.toLowerCase().includes('tdp') || key.toLowerCase().includes('power') || key.toLowerCase().includes('process') || key.toLowerCase().includes('limits')) {
+                 invert = true; 
+             }
+             html += renderRow(key, baseItem.specs?.[key], compItem.specs?.[key], invert);
+        }
+
+        html += '</table>';
+        document.getElementById('compare-table-container').innerHTML = html;
     }
 };
 
@@ -341,67 +610,63 @@ window.renderInventory = function () {
         return;
     }
 
+    listContainer.className = 'storefront-grid';
     listContainer.innerHTML = items.map(item => {
-        // Color coding
+        // Color coding matching storefront UI
         const typeColors = {
             'CPU': '#00aaff', 'GPU': '#76b900', 'RAM': '#ffaa00', 'Storage': '#ff4444',
-            'Motherboard': '#888', 'Camera': '#00ffff', 'Display': '#ff00ff',
+            'Motherboard': '#a1a1aa', 'Camera': '#00ffff', 'Display': '#ff00ff',
             'Desktop': '#bd00ff', 'Console': '#ff8800', 'Smartphone': '#00ffaa', 'Laptop': '#4488ff', 'Server': '#00ff88'
         };
-        const accent = typeColors[item.type] || 'var(--accent)';
-        const opacity = item.active ? 1 : 0.6;
+        const color = typeColors[item.type] || 'var(--accent)';
+        const opacity = item.active ? 1 : 0.5;
         const statusBadge = item.active
-            ? `<span style="color:#00e676; font-size:0.65rem; font-weight:bold; border:1px solid rgba(0,230,118,0.3); background:rgba(0,230,118,0.1); padding:3px 6px; border-radius:4px;">ACTIVE</span>`
-            : `<span style="color:#8b8d98; font-size:0.65rem; font-weight:bold; border:1px solid #3f414d; background:rgba(255,255,255,0.05); padding:3px 6px; border-radius:4px;">ARCHIVED</span>`;
+            ? `<div class="flagship-badge" style="background:rgba(0,230,118,0.2); color:#00e676; border:1px solid rgba(0,230,118,0.5);">ACTIVE</div>`
+            : `<div class="flagship-badge" style="background:rgba(255,255,255,0.05); color:#888; border:1px solid #444;">ARCHIVED</div>`;
 
-        // Format Specs
-        let specHtml = Object.entries(item.specs).map(([k, v]) =>
-            `<div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-                <span style="color:var(--text-muted); font-weight:600;">${k}</span>
-                <span style="color:#fff; font-family:var(--font-mono);">${v}</span>
-            </div>`
-        ).join('');
+        // Format top 3 Specs to match storefront cards
+        const topSpecs = Object.entries(item.specs).slice(0, 3);
+        const specsHtml = topSpecs.map(([k, v]) => `
+            <div class="hero-spec">
+                <span class="hero-spec-label">${k}</span>
+                <span class="hero-spec-value">${v}</span>
+            </div>
+        `).join('');
+
+        // Prefer explicit Score string, fallback to gaming score
+        const displayScore = item.specs.Score ? item.specs.Score : (item.score || 0);
 
         return `
-            <div class="panel" style="--panel-color: ${accent}; opacity:${opacity}; display:flex; flex-direction:column;">
-                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:12px;">
-                    <div>
-                        <div style="font-size:0.7rem; color:${accent}; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;">${item.type}</div>
-                        <h3 style="margin:0; color:#fff; font-size:1.15rem; border:none; padding:0;">${item.name}</h3>
-                        <div style="margin-top:6px;">${statusBadge} <span style="font-size:0.75rem; color:var(--text-main); font-weight:bold; margin-left:8px; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">SCORE: ${item.score || 0}</span></div>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:1.2rem; color:var(--accent); font-family:var(--font-mono); font-weight:bold;">$${item.raw.price || 0}</div>
-                        <div style="font-size:0.75rem; color:var(--text-muted); font-weight:bold; margin-top:2px;">YEAR ${item.year || 'N/A'}</div>
-                    </div>
-                </div>
+            <div class="storefront-card" style="--theme-color: ${color}; opacity:${opacity};">
+                ${statusBadge}
                 
-                <div style="flex:1; margin-bottom:10px; background:rgba(0,0,0,0.3); padding:10px 12px; border-radius:6px; border:1px solid var(--border-dim);">
-                    ${specHtml}
+                <div class="storefront-card-header">
+                    <div style="font-size:0.75rem; color:${color}; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;">${item.type}</div>
+                    <div class="storefront-card-year">${item.year || ''}</div>
+                    <h3 class="storefront-card-title">${item.name}</h3>
+                    <div style="margin-top:5px; font-size:0.75rem; color:var(--text-main); font-weight:bold; background:rgba(0,0,0,0.5); padding:3px 6px; border-radius:4px; display:inline-block; border:1px solid var(--border-light);">
+                        BENCHMARK: <span style="color:var(--accent);">${displayScore}</span>
+                    </div>
                 </div>
 
-                <div style="display:flex; gap:8px;">
-                    <button onclick="window.cloneToArchitect(${item.id})" 
-                        style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
-                        CLONE TO R&D
-                    </button>
+                <div class="storefront-card-specs">
+                    ${specsHtml}
                 </div>
 
-                <div style="display:flex; gap:8px; margin-top:8px;">
-                    <button onclick="window.sys.openEditModal(${item.id})" 
-                        style="flex:1; background:rgba(255,255,255,0.05); color:#fff; border:1px solid var(--border-light); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
-                        EDIT
-                    </button>
-                    ${item.active ?
-                `<button onclick="window.sys.discontinue(${item.id})" 
-                            style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
-                            DISCONTINUE
-                        </button>`
-                : `<button onclick="window.sys.deleteDesign(${item.id})" 
-                            style="flex:1; background:transparent; color:var(--text-muted); border:1px solid var(--border-dim); padding:10px; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; transition:0.2s;">
-                            DELETE
-                        </button>`
-            }
+                <div class="storefront-card-footer">
+                    <div class="storefront-price">$${item.raw.price || 0}</div>
+                    <div style="display:flex; gap:5px; flex-wrap:wrap; width:100%; margin-top:10px;">
+                        <button class="storefront-edit-btn" style="flex:1; padding:6px 0;" onclick="window.cloneToArchitect(${item.id})">CLONE</button>
+                        <button class="storefront-edit-btn" style="flex:1; padding:6px 0; color:var(--accent-secondary); border-color:var(--accent-secondary);" onclick="window.sys.openEditModal(${item.id})">EDIT</button>
+                        ${item.raw && item.raw.hideStorefront ? 
+                            `<button class="storefront-edit-btn" style="flex:1; padding:6px 0; color:#aaa; border-color:#444;" onclick="window.sys.toggleHide(${item.id})">UNHIDE</button>` : 
+                            `<button class="storefront-edit-btn" style="flex:1; padding:6px 0; color:#aaa; border-color:#444;" onclick="window.sys.toggleHide(${item.id})">HIDE</button>`
+                        }
+                        ${item.active ?
+                            `<button class="storefront-edit-btn" style="flex:1; padding:6px 0; color:#ff1744; border-color:rgba(255,23,68,0.5);" onclick="window.sys.discontinue(${item.id})">DISCONTINUE</button>`
+                            : `<button class="storefront-edit-btn" style="flex:1; padding:6px 0; color:#666; border-color:#444;" onclick="window.sys.deleteDesign(${item.id})">DELETE</button>`
+                        }
+                    </div>
                 </div>
             </div>
         `;
@@ -433,9 +698,11 @@ window.toggleAdvFilter = function () {
 window.renderStorefront = function () {
     const workspace = document.getElementById('workspace');
     const db = window.sys.load();
+    
+    window.storefrontFilter = window.storefrontFilter || 'ALL';
 
-    // 1. Filter only ACTIVE products
-    const activeProducts = db.inventory.filter(i => i.active);
+    // 1. Filter only ACTIVE products and not hidden in storefront
+    const activeProducts = db.inventory.filter(i => i.active && !i.raw.hideStorefront);
 
     // Empty State Check
     if (activeProducts.length === 0) {
@@ -476,9 +743,6 @@ window.renderStorefront = function () {
     // 3. Global Stats Calculation
     const totalProducts = activeProducts.length;
     const activeDivisions = Object.keys(groups).length;
-    // Just a fun aesthetic calc for "Company Valuation" based on product prices/scores
-    const estValue = activeProducts.reduce((sum, item) => sum + (item.raw.price || 0) * (item.score || 100) * 10, 0);
-    const formattedValue = estValue > 1000000 ? `$${(estValue / 1000000).toFixed(1)}M` : `$${estValue.toLocaleString()}`;
 
     // 4. Color Mapping for UI
     const typeColors = {
@@ -490,49 +754,102 @@ window.renderStorefront = function () {
     // 5. Build HTML
     let html = `
         <!-- Stats Glass Bar -->
-        <div class="storefront-stats-bar">
+        <div class="storefront-stats-bar" style="display:flex; justify-content:center; gap:30px; margin-bottom: 25px;">
             <div class="stat-block">
-                <span class="stat-label">PRODUCTS ON MARKET</span>
+                <span class="stat-label">PRODUCTS AVAILABLE</span>
                 <span class="stat-value" style="color:#fff;">${totalProducts}</span>
             </div>
             <div class="stat-block">
-                <span class="stat-label">ACTIVE DIVISIONS</span>
+                <span class="stat-label">DIVISIONS</span>
                 <span class="stat-value" style="color:var(--accent);">${activeDivisions}</span>
-            </div>
-            <div class="stat-block">
-                <span class="stat-label">EST. MARKET CAP</span>
-                <span class="stat-value" style="color:#00e676;">${formattedValue}</span>
             </div>
         </div>
     `;
 
+    // Category filtering UI
+    const categories = ['ALL', 'PARTS', 'PRODUCTS', 'CPU', 'GPU', 'RAM', 'Storage', 'Motherboard', 'Camera', 'Display', 'Desktop', 'Console', 'Smartphone', 'Laptop', 'Server'];
+    let filterHtml = '<div class="storefront-filters" style="display:flex; gap:10px; margin-bottom: 40px; flex-wrap:wrap; justify-content:center;">';
+    categories.forEach(cat => {
+        const activeStyle = window.storefrontFilter === cat ? 'background:var(--accent); color:var(--bg-base);' : 'background:rgba(255,255,255,0.05); color:var(--text-muted); border:1px solid var(--border-dim);';
+        filterHtml += `<button onclick="window.storefrontFilter='${cat}'; window.renderStorefront()" style="padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; cursor:pointer; ${activeStyle}">${cat}</button>`;
+    });
+    filterHtml += '</div>';
+    html += filterHtml;
+
+    const parts = ['CPU', 'GPU', 'RAM', 'Storage', 'Motherboard', 'Camera', 'Display'];
+    const products = ['Desktop', 'Console', 'Smartphone', 'Laptop', 'Server'];
+
     // Iterate through each division
     for (const [type, group] of Object.entries(groups)) {
+        if (window.storefrontFilter !== 'ALL') {
+            if (window.storefrontFilter === 'PARTS' && !parts.includes(type)) continue;
+            else if (window.storefrontFilter === 'PRODUCTS' && !products.includes(type)) continue;
+            else if (window.storefrontFilter !== 'PARTS' && window.storefrontFilter !== 'PRODUCTS' && type !== window.storefrontFilter) continue;
+        }
         const color = typeColors[type] || 'var(--accent)';
 
         // Sort items in the group by score descending (so Flagship is first)
         group.items.sort((a, b) => (b.score || 0) - (a.score || 0));
 
         html += `
-            <div class="storefront-section">
-                <h2 class="storefront-section-title" style="border-left: 4px solid ${color};">
-                    ${type} LINEUP
-                    <span class="storefront-section-count">${group.items.length} MODELS</span>
+            <div class="storefront-section" id="section-${type}">
+                <h2 class="storefront-section-title" style="border-left: 4px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:15px;">
+                        ${type} LINEUP
+                        <span class="storefront-section-count">${group.items.length} MODELS</span>
+                    </div>
+                    <button onclick="
+                        const grid = this.parentElement.nextElementSibling;
+                        if(grid.style.display === 'none') {
+                            grid.style.display = 'grid';
+                            this.innerHTML = '▼';
+                        } else {
+                            grid.style.display = 'none';
+                            this.innerHTML = '▶';
+                        }
+                    " style="font-size:1rem; color:var(--text-muted); background:none; border:none; cursor:pointer; padding:5px;">▼</button>
                 </h2>
-                <div class="storefront-grid">
+                <div class="storefront-grid" style="display:grid;">
         `;
 
         group.items.forEach(item => {
             const isFlagship = item.id === group.flagshipId;
 
-            // Extract top 3 specs for the hero card
-            const topSpecs = Object.entries(item.specs).slice(0, 3);
+            // Extract all specs, split them
+            const allSpecs = Object.entries(item.specs);
+            const topSpecs = allSpecs.slice(0, 3);
+            const restSpecs = allSpecs.slice(3);
+
             const specsHtml = topSpecs.map(([k, v]) => `
                 <div class="hero-spec">
                     <span class="hero-spec-label">${k}</span>
                     <span class="hero-spec-value">${v}</span>
                 </div>
             `).join('');
+
+            const restSpecsHtml = restSpecs.length > 0 ? `
+                <div class="rest-specs" style="display:none; margin-top:10px; border-top:1px dashed rgba(255,255,255,0.1); padding-top:10px;">
+                    ${restSpecs.map(([k, v]) => `
+                        <div class="hero-spec">
+                            <span class="hero-spec-label">${k}</span>
+                            <span class="hero-spec-value">${v}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <button class="toggle-specs-btn" onclick="
+                    const rest = this.previousElementSibling;
+                    if(rest.style.display === 'none') {
+                        rest.style.display = 'block';
+                        this.innerText = 'HIDE SPECS ▲';
+                    } else {
+                        rest.style.display = 'none';
+                        this.innerText = 'SHOW ALL SPECS ▼';
+                    }
+                " style="width:100%; background:none; border:none; color:var(--text-muted); font-size:0.7rem; font-weight:bold; cursor:pointer; padding:8px 0; margin-top:5px; text-transform:uppercase;">SHOW ALL SPECS ▼</button>
+            ` : '';
+
+            // Prefer explicit Score string, fallback to gaming score
+            const displayScore = item.specs.Score ? item.specs.Score : (item.score || 0);
 
             html += `
                 <div class="storefront-card ${isFlagship ? 'flagship' : ''}" style="--theme-color: ${color};">
@@ -542,19 +859,22 @@ window.renderStorefront = function () {
                         <div class="storefront-card-year">${item.year || ''}</div>
                         <h3 class="storefront-card-title">${item.name}</h3>
                         <div style="margin-top:5px; font-size:0.75rem; color:var(--text-main); font-weight:bold; background:rgba(0,0,0,0.5); padding:3px 6px; border-radius:4px; display:inline-block; border:1px solid var(--border-light);">
-                            BENCHMARK: <span style="color:var(--accent);">${item.score || 0}</span>
+                            BENCHMARK: <span style="color:var(--accent);">${displayScore}</span>
                         </div>
                     </div>
 
                     <div class="storefront-card-specs">
                         ${specsHtml}
+                        ${restSpecsHtml}
                     </div>
 
-                    <div class="storefront-card-footer">
-                        <div class="storefront-price">$${item.raw.price || 0}</div>
-                        <div style="display:flex; gap:5px;">
-                            <button class="storefront-edit-btn" onclick="window.sys.openEditModal(${item.id})">EDIT</button>
-                            <button class="storefront-edit-btn" style="color:var(--accent-success); border-color:var(--accent-success);" onclick="window.cloneToArchitect(${item.id})">CLONE</button>
+                    <div class="storefront-card-footer" style="flex-direction:column; gap:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end; width:100%; border-bottom:1px solid #333; padding-bottom:8px;">
+                            <span style="font-size:0.75rem; color:#00e676; font-weight:bold; background:rgba(0,230,118,0.1); padding:4px 8px; border-radius:4px; border:1px solid rgba(0,230,118,0.3);">IN STOCK</span>
+                            <div class="storefront-price">$${item.raw.price || 0}</div>
+                        </div>
+                        <div style="display:flex; gap:8px; width:100%;">
+                            <button onclick="window.sys.openStorefrontDetails(${item.id})" style="flex:1; background:var(--theme-color); color:#fff; border:none; padding:8px 0; font-weight:bold; font-size:0.75rem; cursor:pointer; border-radius:4px; text-transform:uppercase; letter-spacing:1px; box-shadow:0 0 10px var(--theme-color)44;">VIEW SPECS</button>
                         </div>
                     </div>
                 </div>

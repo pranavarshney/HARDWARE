@@ -32,9 +32,23 @@ window.mobo = {
 
                 <div class="panel">
                     <h3>Platform Identity</h3>
-                    <div class="input-group">
-                        <label>Model Name</label>
-                        <input type="text" id="mobo-name" value="Z790 Aorus Master">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="mobo-name-model" onchange="window.mobo.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="mobo-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="mobo-name-version" value="Aorus Master">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="mobo-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -164,6 +178,60 @@ window.mobo = {
 
         this.updatePhysics();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('mobo-name-model');
+        const newModelInput = document.getElementById('mobo-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'Motherboard').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            document.getElementById('mobo-name-model-new').style.display = 'block';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('mobo-name-model');
+        const newModelInput = document.getElementById('mobo-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            // Clear other fields if creating a new model
+            document.getElementById('mobo-name-version').value = "";
+            // Optionally clear other fields or set to defaults if desired
+            return; // Don't try to load a preset for "NEW"
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'Motherboard' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            document.getElementById('mobo-name-version').value = ""; // Clear version name when loading a model
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     loadPreset: function (name) {
@@ -188,7 +256,37 @@ window.mobo = {
 
     loadBase: function (raw) {
         const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
-        set('mobo-name', raw.name);
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        const modelSelect = document.getElementById('mobo-name-model');
+        const newModelInput = document.getElementById('mobo-name-model-new');
+        
+        if (raw.modelName) {
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            // If no modelName in raw, treat as new or use raw.name for the new input
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name; // Fallback to raw.name if modelName is missing
+        }
+
+        set('mobo-name-version', raw.versionName || "");
+        setCheck('mobo-hide-storefront', raw.hideStorefront);
         set('mobo-socket', raw.socket);
         set('mobo-chip', raw.chip);
         set('mobo-form', raw.form);
@@ -280,8 +378,15 @@ window.mobo = {
             return parseFloat(el.value) || 0;
         };
 
+        const modelSelect = document.getElementById('mobo-name-model');
+        const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('mobo-name-model-new').value : modelSelect.value) : "Unknown";
+        const version = document.getElementById('mobo-name-version') ? document.getElementById('mobo-name-version').value : "";
+
         return {
-            name: document.getElementById('mobo-name').value,
+            modelName: model,
+            versionName: version,
+            name: (model + " " + version).trim(),
+            hideStorefront: document.getElementById('mobo-hide-storefront') ? document.getElementById('mobo-hide-storefront').checked : false,
             socket: get('mobo-socket'),
             chip: get('mobo-chip'),
             form: get('mobo-form'),
@@ -323,9 +428,13 @@ window.mobo = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
+                    ${board.raw && board.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${board.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${board.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${board.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>

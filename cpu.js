@@ -48,9 +48,23 @@ window.cpu = {
                             <input type="text" id="cpu-arch" value="Lion Cove" placeholder="e.g. Zen 5">
                         </div>
                     </div>
-                    <div class="input-group">
-                        <label>Model Name</label>
-                        <input type="text" id="cpu-name" value="Core Ultra 9">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="cpu-name-model" onchange="window.cpu.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="cpu-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="cpu-name-version" value="285K">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="cpu-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -218,6 +232,58 @@ window.cpu = {
 
         this.updatePreview();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('cpu-name-model');
+        const newModelInput = document.getElementById('cpu-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'CPU').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            document.getElementById('cpu-name-model-new').style.display = 'block';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('cpu-name-model');
+        const newModelInput = document.getElementById('cpu-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            return;
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'CPU' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            // modelInput.value = modelName; // This line is no longer needed as loadBase handles setting the select
+            document.getElementById('cpu-name-version').value = "";
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     estimateFab: function (year) {
@@ -271,7 +337,34 @@ window.cpu = {
         const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
         const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
 
-        set('cpu-name', raw.name);
+        const modelSelect = document.getElementById('cpu-name-model');
+        const newModelInput = document.getElementById('cpu-name-model-new');
+        
+        if (raw.modelName) {
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name;
+        }
+
+        set('cpu-name-version', raw.versionName || "");
+        setCheck('cpu-hide-storefront', raw.hideStorefront);
         set('cpu-segment', raw.segment);
         set('cpu-arch', raw.arch);
         set('cpu-fab', raw.fab);
@@ -336,8 +429,15 @@ window.cpu = {
         };
         const igpuOn = document.getElementById('igpu-enable') ? document.getElementById('igpu-enable').checked : false;
 
+        const modelSelect = document.getElementById('cpu-name-model');
+        const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('cpu-name-model-new').value : modelSelect.value) : "Unknown";
+        const version = document.getElementById('cpu-name-version') ? document.getElementById('cpu-name-version').value : "";
+
         return {
-            name: document.getElementById('cpu-name') ? document.getElementById('cpu-name').value : "Unknown",
+            modelName: model,
+            versionName: version,
+            name: (model + " " + version).trim(),
+            hideStorefront: document.getElementById('cpu-hide-storefront') ? document.getElementById('cpu-hide-storefront').checked : false,
             segment: document.getElementById('cpu-segment') ? document.getElementById('cpu-segment').value : "Desktop",
             arch: document.getElementById('cpu-arch') ? document.getElementById('cpu-arch').value : "Generic",
 
@@ -556,7 +656,7 @@ window.cpu = {
             <div class="panel" style="padding:15px; display:flex; flex-direction:column; gap:5px;">
                 <div style="font-weight:800; color:var(--accent); font-size:1rem;">${cpu.name} <span style="font-size:0.6rem; color:#888; border:1px solid #444; padding:2px 4px; border-radius:3px; margin-left:4px;">${cpu.raw?.segment || 'CPU'}</span></div>
                 <div style="font-size:0.75rem; color:#aaa; font-family:var(--font-mono);">
-                    <div>${specs.Socket || 'N/A'} | ${specs.Cores || 'N/A'}</div>
+                    <div>${specs.Clocks || (cpu.raw ? cpu.raw.pBase + '/' + cpu.raw.pTurbo + ' GHz' : 'N/A')} | ${specs['Cores/Threads'] || specs.Cores || 'N/A'}</div>
                     <div style="margin-top:4px;">${scoreStr}</div>
                     <div style="margin-top:4px; color:#fff; font-size:0.9rem;">$${cpu.raw?.price || 0}</div>
                 </div>
@@ -566,9 +666,13 @@ window.cpu = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
                         CLONE
                     </button>
+                    ${cpu.raw && cpu.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${cpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${cpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${cpu.id})" 
                         style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
@@ -589,11 +693,11 @@ window.cpu = {
             name: data.name,
             specs: {
                 "Segment": data.segment,
-                "Socket": data.socket,
-                "Cores": `${data.pCores}P + ${data.eCores}E`,
-                "Limits": `${data.pl1}W / ${data.pl2}W`,
+            "Clocks": `${data.pBase} / ${data.pTurbo} GHz`,
+            "Cores/Threads": `${data.pCores}P + ${data.eCores}E / ${data.threads}T`,
+            "Limits": `${data.pl1}W / ${data.pl2}W`,
                 "Process": `${data.fab}nm`,
-                "Score": `S:${results.singleScore} / M:${results.multiScore}`,
+                "Score": `multi - ${results.multiScore} single - ${results.singleScore}`,
                 "iGPU": data.igpuEnabled ? `${results.igpuScore} pts` : "None"
             },
             price: data.price,

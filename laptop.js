@@ -33,9 +33,23 @@ window.laptop = {
                 
                 <div class="panel">
                     <h3>Model Identity</h3>
-                    <div class="input-group">
-                        <label>Model Name</label>
-                        <input type="text" id="lap-name" value="Stealth Book Pro">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="lap-name-model" onchange="window.laptop.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="lap-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="lap-name-version" value="Pro">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="lap-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -151,10 +165,113 @@ window.laptop = {
 
         this.updatePhysics();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('lap-name-model');
+        const newModelInput = document.getElementById('lap-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'Laptop').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            document.getElementById('lap-name-model-new').style.display = 'block';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('lap-name-model');
+        const newModelInput = document.getElementById('lap-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            return;
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'Laptop' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            modelSelect.value = modelName; // Ensure the select stays on the chosen model
+            document.getElementById('lap-name-version').value = "";
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        const modelSelect = document.getElementById('lap-name-model');
+        const newModelInput = document.getElementById('lap-name-model-new');
+        
+        if (raw.modelName) {
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name;
+        }
+
+        set('lap-name-version', raw.versionName || "");
+        setCheck('lap-hide-storefront', raw.hideStorefront);
+        set('lap-year', raw.year);
+        set('lap-price', raw.price);
+        if (raw.chassis) set('lap-chassis', raw.chassis);
+        if (raw.bat) set('lap-bat', raw.bat);
+        if (raw.charger) set('lap-charger', raw.charger);
+        if (raw.key) set('lap-key', raw.key);
+
+        if (raw.components) {
+            set('lap-cpu', raw.components.cpu);
+            set('lap-gpu', raw.components.gpu);
+            set('lap-mobo', raw.components.mobo);
+            set('lap-ram', raw.components.ram);
+            set('lap-storage', raw.components.storage);
+            set('lap-display', raw.components.disp);
+            set('lap-camera', raw.components.cam);
+        }
+        this.updatePhysics();
     },
 
     // --- 3. INVENTORY LINKING ---
@@ -334,11 +451,23 @@ window.laptop = {
     },
 
     scrapeData: function () {
+        let modelName = document.getElementById('lap-name-model').value;
+        if (modelName === "NEW") {
+            modelName = document.getElementById('lap-name-model-new').value || "Custom";
+        }
+        const versionName = document.getElementById('lap-name-version').value;
+        const fullName = `${modelName} ${versionName}`.trim();
         return {
-            name: document.getElementById('lap-name').value,
+            modelName: modelName,
+            versionName: versionName,
+            name: fullName,
+            hideStorefront: document.getElementById('lap-hide-storefront') ? document.getElementById('lap-hide-storefront').checked : false,
             year: parseFloat(document.getElementById('lap-year').value),
             price: parseFloat(document.getElementById('lap-price').value),
-            chassis: document.getElementById('lap-chassis').value
+            chassis: document.getElementById('lap-chassis') ? document.getElementById('lap-chassis').value : '',
+            bat: document.getElementById('lap-bat') ? parseFloat(document.getElementById('lap-bat').value) : 50,
+            charger: document.getElementById('lap-charger') ? parseFloat(document.getElementById('lap-charger').value) : 65,
+            key: document.getElementById('lap-key') ? document.getElementById('lap-key').value : ''
         };
     },
 
@@ -373,9 +502,13 @@ window.laptop = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
+                    ${p.raw && p.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${p.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${p.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${p.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
@@ -406,6 +539,15 @@ window.laptop = {
             year: meta.year,
             price: meta.price,
             specs: specs,
+            components: {
+                cpu: p.cpu?.id,
+                gpu: p.gpu?.id,
+                ram: p.ram?.id,
+                mobo: p.mobo?.id,
+                storage: p.sto?.id,
+                disp: p.disp?.id,
+                cam: p.cam?.id
+            },
             ...meta
         });
 

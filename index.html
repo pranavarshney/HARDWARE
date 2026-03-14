@@ -40,6 +40,7 @@
         <div class="nav-modes">
             <button id="btn-current" class="nav-main active">CURRENT PRODUCTS</button>
             <button id="btn-all" class="nav-main">ALL PRODUCTS</button>
+            <button class="nav-main" onclick="window.sys.startNewSave()" style="color:#ff4444; border-color:rgba(255,68,68,0.3);">START NEW SAVE</button>
         </div>
     </div>
 
@@ -278,6 +279,20 @@
                 if (module && typeof module.render === 'function') {
                     // Render the Architect
                     module.render(workspace);
+                    
+                    // Auto-load the last crafted component of this type
+                    if (typeof module.loadBase === 'function' && window.sys) {
+                        const db = window.sys.load();
+                        const matchingItems = db.inventory.filter(i => i.type.toLowerCase() === window.currentPart.toLowerCase());
+                        if (matchingItems.length > 0) {
+                            // Sort descending by id to get the latest
+                            matchingItems.sort((a, b) => b.id - a.id);
+                            const latestItem = matchingItems[0];
+                            module.loadBase(latestItem.raw || latestItem);
+                            if (window.showToast) window.showToast(`Auto-loaded specs from ${latestItem.name}`, 'info');
+                        }
+                    }
+
                 } else {
                     // Stylized Empty State / Missing script
                     workspace.innerHTML = `

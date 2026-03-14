@@ -65,9 +65,23 @@ window.smartphone = {
                 
                 <div class="panel" style="border-color: var(--accent);">
                     <h3>Device Identity & Form</h3>
-                    <div class="input-group">
-                        <label>Product Name</label>
-                        <input type="text" id="phone-name" value="Galaxy X-1">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="phone-name-model" onchange="window.smartphone.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="phone-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="phone-name-version" value="X-1">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="phone-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -240,10 +254,126 @@ window.smartphone = {
 
         this.updatePhysics();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('phone-name-model');
+        const newModelInput = document.getElementById('phone-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'Smartphone').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            document.getElementById('phone-name-model-new').style.display = 'block';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('phone-name-model');
+        const newModelInput = document.getElementById('phone-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            // Clear version when creating new model
+            document.getElementById('phone-name-version').value = "";
+            return;
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'Smartphone' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            // modelInput.value = modelName; // This line is no longer needed as loadBase handles setting the model select
+            document.getElementById('phone-name-version').value = ""; // Clear version when loading existing model
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        const modelSelect = document.getElementById('phone-name-model');
+        const newModelInput = document.getElementById('phone-name-model-new');
+        
+        if (raw.modelName) {
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name;
+        }
+
+        set('phone-name-version', raw.versionName || "");
+        setCheck('phone-hide-storefront', raw.hideStorefront);
+        set('phone-year', raw.year);
+        set('phone-price', raw.price);
+        
+        if (raw.form) set('phone-form', raw.form);
+        if (raw.chassis) set('phone-chassis', raw.chassis);
+        if (raw.batCap) set('phone-bat-cap', raw.batCap);
+        if (raw.batTech) set('phone-bat-tech', raw.batTech);
+        if (raw.charge) set('phone-charge', raw.charge);
+        if (raw.os) set('phone-os', raw.os);
+        if (raw.features) set('phone-features', raw.features);
+        if (raw.ramGen) set('phone-ram-gen', raw.ramGen);
+        if (raw.storageGen) set('phone-storage-gen', raw.storageGen);
+
+        setCheck('feat-wireless', raw.featWireless);
+        setCheck('feat-nfc', raw.featNFC);
+        setCheck('feat-mag', raw.featMag);
+        setCheck('feat-stylus', raw.featStylus);
+
+        if (raw.components) {
+            set('phone-cpu', raw.components.cpu);
+            set('phone-gpu', raw.components.gpu);
+            set('phone-mobo', raw.components.mobo);
+            set('phone-ram', raw.components.ram);
+            set('phone-storage', raw.components.storage);
+            set('phone-display', raw.components.disp);
+            set('phone-camera', raw.components.cam);
+        }
+        this.updatePhysics();
     },
 
     populatePartDropdowns: function () {
@@ -480,11 +610,29 @@ window.smartphone = {
     },
 
     scrapeData: function () {
+        const modelSelect = document.getElementById('phone-name-model');
+        const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('phone-name-model-new').value : modelSelect.value) : "Unknown";
+        const version = document.getElementById('phone-name-version') ? document.getElementById('phone-name-version').value : "";
         return {
-            name: document.getElementById('phone-name').value,
+            modelName: model,
+            versionName: version,
+            name: (model + " " + version).trim(),
+            hideStorefront: document.getElementById('phone-hide-storefront') ? document.getElementById('phone-hide-storefront').checked : false,
             year: parseFloat(document.getElementById('phone-year').value),
             price: parseFloat(document.getElementById('phone-price').value),
-            form: document.getElementById('phone-form').value
+            form: document.getElementById('phone-form') ? document.getElementById('phone-form').value : '',
+            chassis: document.getElementById('phone-chassis') ? document.getElementById('phone-chassis').value : '',
+            batCap: document.getElementById('phone-bat-cap') ? parseFloat(document.getElementById('phone-bat-cap').value) : 5000,
+            batTech: document.getElementById('phone-bat-tech') ? document.getElementById('phone-bat-tech').value : '',
+            charge: document.getElementById('phone-charge') ? document.getElementById('phone-charge').value : '',
+            os: document.getElementById('phone-os') ? document.getElementById('phone-os').value : '',
+            features: document.getElementById('phone-features') ? document.getElementById('phone-features').value : '',
+            ramGen: document.getElementById('phone-ram-gen') ? document.getElementById('phone-ram-gen').value : '',
+            storageGen: document.getElementById('phone-storage-gen') ? document.getElementById('phone-storage-gen').value : '',
+            featWireless: document.getElementById('feat-wireless') ? document.getElementById('feat-wireless').checked : false,
+            featNFC: document.getElementById('feat-nfc') ? document.getElementById('feat-nfc').checked : false,
+            featMag: document.getElementById('feat-mag') ? document.getElementById('feat-mag').checked : false,
+            featStylus: document.getElementById('feat-stylus') ? document.getElementById('feat-stylus').checked : false
         };
     },
 
@@ -527,9 +675,13 @@ window.smartphone = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
                         CLONE
                     </button>
+                    ${p.raw && p.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${p.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${p.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${p.id})" 
                         style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
@@ -561,6 +713,15 @@ window.smartphone = {
             year: meta.year,
             price: meta.price, // Saving at top level to fix the price bug
             specs: specs,
+            components: {
+                cpu: p.cpu?.id,
+                gpu: p.gpu?.id,
+                ram: p.ram?.id,
+                mobo: p.mobo?.id,
+                storage: p.sto?.id,
+                disp: p.disp?.id,
+                cam: p.cam?.id
+            },
             ...meta
         });
 

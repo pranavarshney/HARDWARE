@@ -36,9 +36,23 @@ window.consoleArch = {
                 
                 <div class="panel">
                     <h3>Console Identity</h3>
-                    <div class="input-group">
-                        <label>Console Name</label>
-                        <input type="text" id="con-name" value="GameBox 360">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <select id="con-name-model" onchange="window.consoleArch.onModelChange()">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <input type="text" id="con-name-model-new" placeholder="New Model Name" style="display:none; margin-top:5px;">
+                        </div>
+                        <div class="input-group">
+                            <label>Version Name</label>
+                            <input type="text" id="con-name-version" value="360">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="con-hide-storefront"> Hide in Storefront
+                        </label>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -148,10 +162,111 @@ window.consoleArch = {
 
         this.updatePhysics();
         this.refreshLineup();
+        this.populateModelList();
+    },
+
+    populateModelList: function() {
+        const select = document.getElementById('con-name-model');
+        const newModelInput = document.getElementById('con-name-model-new');
+        if (!select || !window.sys) return;
+        const db = window.sys.load();
+        const models = new Set();
+        db.inventory.filter(i => i.type === 'Console').forEach(i => {
+            if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
+        });
+        
+        let html = `<option value="NEW">+ Create New Model</option>`;
+        Array.from(models).forEach(m => {
+            html += `<option value="${m}">${m}</option>`;
+        });
+        select.innerHTML = html;
+        
+        // Auto-select "NEW" if no models exist
+        if (models.size === 0) {
+            select.value = "NEW";
+            document.getElementById('con-name-model-new').style.display = 'block';
+        }
+    },
+
+    onModelChange: function() {
+        const modelSelect = document.getElementById('con-name-model');
+        const newModelInput = document.getElementById('con-name-model-new');
+        if (!modelSelect || !window.sys) return;
+        
+        const modelName = modelSelect.value;
+        
+        if (modelName === "NEW") {
+            newModelInput.style.display = 'block';
+            newModelInput.focus();
+            return;
+        } else {
+            newModelInput.style.display = 'none';
+        }
+        
+        const db = window.sys.load();
+        
+        const matches = db.inventory.filter(i => i.type === 'Console' && i.raw && i.raw.modelName === modelName);
+        if (matches.length > 0) {
+            matches.sort((a,b) => b.id - a.id);
+            const latest = matches[0];
+            this.loadBase(latest.raw);
+            modelSelect.value = modelName; // Ensure the select is set correctly after loadBase might change it
+            document.getElementById('con-name-version').value = "";
+            if (window.showToast) window.showToast(`Auto-cloned specs from ${latest.name}`, "info");
+        }
     },
 
     renderOptions: function (obj) {
         return Object.keys(obj).map(k => `<option value="${k}">${k}</option>`).join('');
+    },
+
+    loadBase: function (raw) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
+
+        const modelSelect = document.getElementById('con-name-model');
+        const newModelInput = document.getElementById('con-name-model-new');
+        
+        if (raw.modelName) {
+            let exists = false;
+            for (let i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === raw.modelName) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (exists) {
+                modelSelect.value = raw.modelName;
+                newModelInput.style.display = 'none';
+            } else {
+                modelSelect.value = "NEW";
+                newModelInput.style.display = 'block';
+                newModelInput.value = raw.modelName;
+            }
+        } else {
+            modelSelect.value = "NEW";
+            newModelInput.style.display = 'block';
+            newModelInput.value = raw.name;
+        }
+
+        set('con-name-version', raw.versionName || "");
+        setCheck('con-hide-storefront', raw.hideStorefront);
+        set('con-year', raw.year);
+        set('con-price', raw.price);
+        if (raw.case) set('con-case', raw.case);
+        if (raw.controller) set('con-controller', raw.controller);
+        if (raw.cool) set('con-cool', raw.cool);
+        if (raw.psu) set('con-psu', raw.psu);
+        
+        if (raw.components) {
+            set('con-cpu', raw.components.cpu);
+            set('con-gpu', raw.components.gpu);
+            set('con-mobo', raw.components.mobo);
+            set('con-ram', raw.components.ram);
+            set('con-storage', raw.components.storage);
+        }
+        this.updatePhysics();
     },
 
     // --- 3. INVENTORY LINKING ---
@@ -269,10 +384,23 @@ window.consoleArch = {
     },
 
     scrapeData: function () {
+        let modelName = document.getElementById('con-name-model').value;
+        if (modelName === "NEW") {
+            modelName = document.getElementById('con-name-model-new').value || "Custom";
+        }
+        const versionName = document.getElementById('con-name-version').value;
+        const fullName = `${modelName} ${versionName}`.trim();
         return {
-            name: document.getElementById('con-name').value,
+            modelName: modelName,
+            versionName: versionName,
+            name: fullName,
+            hideStorefront: document.getElementById('con-hide-storefront') ? document.getElementById('con-hide-storefront').checked : false,
             year: parseFloat(document.getElementById('con-year').value),
-            price: parseFloat(document.getElementById('con-price').value)
+            price: parseFloat(document.getElementById('con-price').value),
+            case: document.getElementById('con-case') ? document.getElementById('con-case').value : '',
+            controller: document.getElementById('con-controller') ? document.getElementById('con-controller').value : '',
+            cool: document.getElementById('con-cool') ? document.getElementById('con-cool').value : '',
+            psu: document.getElementById('con-psu') ? document.getElementById('con-psu').value : ''
         };
     },
 
@@ -307,9 +435,13 @@ window.consoleArch = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
+                    ${c.raw && c.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${c.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${c.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${c.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
@@ -340,6 +472,13 @@ window.consoleArch = {
             year: meta.year,
             price: meta.price,
             specs: specs,
+            components: {
+                cpu: p.cpu?.id,
+                gpu: p.gpu?.id,
+                ram: p.ram?.id,
+                mobo: p.mobo?.id,
+                storage: p.sto?.id
+            },
             ...meta
         });
 

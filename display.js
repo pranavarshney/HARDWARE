@@ -45,9 +45,16 @@ window.display = {
 
                 <div class="panel">
                     <h3>Identity & Panel</h3>
-                    <div class="input-group">
-                        <label>Model Name</label>
-                        <input type="text" id="disp-name" value="UltraView X1">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Model Name</label>
+                            <input type="text" id="disp-name" value="UltraView X1">
+                        </div>
+                        <div class="input-group" style="display:flex; align-items:flex-end;">
+                            <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer; margin-bottom: 8px;">
+                                <input type="checkbox" id="disp-hide-storefront"> Hide in Storefront
+                            </label>
+                        </div>
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="input-group">
@@ -226,8 +233,10 @@ window.display = {
 
     loadBase: function (raw) {
         const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
 
         set('disp-name', raw.name);
+        setCheck('disp-hide-storefront', raw.hideStorefront);
         set('disp-type', raw.type);
         set('disp-size', raw.size);
         set('disp-w', raw.w);
@@ -255,6 +264,7 @@ window.display = {
 
         return {
             name: getStr('disp-name'),
+            hideStorefront: document.getElementById('disp-hide-storefront') ? document.getElementById('disp-hide-storefront').checked : false,
             type: getStr('disp-type'),
             size: getNum('disp-size'),
             w: getNum('disp-w'),
@@ -436,9 +446,13 @@ window.display = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
                         CLONE
                     </button>
+                    ${disp.raw && disp.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${disp.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${disp.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${disp.id})" 
                         style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>

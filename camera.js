@@ -54,6 +54,11 @@ window.camera = {
                             <input type="text" id="cam-name" value="OmniVision X-Pro">
                         </div>
                     </div>
+                    <div style="margin-top:10px; margin-bottom:10px;">
+                        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; color:#aaa; cursor:pointer;">
+                            <input type="checkbox" id="cam-hide-storefront"> Hide in Storefront
+                        </label>
+                    </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
                         <div class="input-group">
                             <label>Aspect Ratio</label>
@@ -307,6 +312,7 @@ window.camera = {
         const setCheck = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = val; };
 
         set('cam-name', raw.name);
+        setCheck('cam-hide-storefront', raw.hideStorefront);
         set('cam-segment', raw.segment);
         set('cam-aspect', raw.aspect);
         set('cam-mp', raw.mp);
@@ -358,6 +364,7 @@ window.camera = {
 
         return {
             name: document.getElementById('cam-name').value,
+            hideStorefront: document.getElementById('cam-hide-storefront') ? document.getElementById('cam-hide-storefront').checked : false,
             segment: document.getElementById('cam-segment').value,
             aspect: document.getElementById('cam-aspect').value,
             mp: get('cam-mp'),
@@ -559,9 +566,13 @@ window.camera = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
                         CLONE
                     </button>
+                    ${cam.raw && cam.raw.hideStorefront ? 
+                        `<button onclick="window.sys.toggleHide(${cam.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">UNHIDE</button>` : 
+                        `<button onclick="window.sys.toggleHide(${cam.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">HIDE</button>`
+                    }
                     <button onclick="window.sys.discontinue(${cam.id})" 
                         style="flex:1; background:rgba(255,23,68,0.1); color:#ff1744; border:1px solid rgba(255,23,68,0.3); font-weight:bold; font-size:0.7rem; padding:8px; cursor:pointer; border-radius:4px; transition:0.2s;">
-                        DISCONTINUE
+                        DISCON.
                     </button>
                 </div>
             </div>
