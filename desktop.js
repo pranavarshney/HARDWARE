@@ -85,9 +85,19 @@ window.desktop = {
                             <select id="sys-mobo" class="part-selector"></select>
                         </div>
                     </div>
-                    <div class="input-group" style="margin-top:10px;">
-                        <label>Memory (RAM)</label>
-                        <select id="sys-ram" class="part-selector"></select>
+                    <div style="display:grid; grid-template-columns: 1fr 2fr; gap:10px; margin-top:10px;">
+                        <div class="input-group">
+                            <label>RAM Qty</label>
+                            <select id="sys-ram-qty">
+                                <option value="1">1x Module</option>
+                                <option value="2" selected>2x Modules</option>
+                                <option value="4">4x Modules</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Memory (RAM)</label>
+                            <select id="sys-ram" class="part-selector"></select>
+                        </div>
                     </div>
                 </div>
 
@@ -98,9 +108,20 @@ window.desktop = {
                             <label>Graphics (GPU)</label>
                             <select id="sys-gpu" class="part-selector"></select>
                         </div>
-                        <div class="input-group">
-                            <label>Primary Storage</label>
-                            <select id="sys-storage" class="part-selector"></select>
+                        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:10px;">
+                            <div class="input-group">
+                                <label>Drive Qty</label>
+                                <select id="sys-storage-qty">
+                                    <option value="1">1x Drive</option>
+                                    <option value="2">2x Drives</option>
+                                    <option value="3">3x Drives</option>
+                                    <option value="4">4x Drives</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Primary Storage</label>
+                                <select id="sys-storage" class="part-selector"></select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -265,7 +286,9 @@ window.desktop = {
             set('sys-gpu', raw.components.gpu);
             set('sys-mobo', raw.components.mobo);
             set('sys-ram', raw.components.ram);
+            set('sys-ram-qty', raw.components.ramQty || 1);
             set('sys-storage', raw.components.storage);
+            set('sys-storage-qty', raw.components.stoQty || 1);
         }
         this.updatePhysics();
     },
@@ -280,24 +303,27 @@ window.desktop = {
             const el = document.getElementById(id);
             if (!el) return;
 
-            // Get all parts of this type (including inactive)
-            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
+            // Get all active parts of this type
+            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase() && i.active === true);
 
             if (parts.length === 0) {
-                el.innerHTML = `<option value="">No ${type}s Found</option>`;
+                if (type === 'GPU') {
+                    el.innerHTML = `<option value="">Integrated Graphics (None)</option>`;
+                } else {
+                    el.innerHTML = `<option value="">No ${type}s Found</option>`;
+                }
             } else {
-                el.innerHTML = parts.map(p => {
-                    const status = p.active ? "" : " (Archived)";
-                    return `<option value="${p.id}">${p.name}${status} ($${p.raw?.price || 0})</option>`;
+                let html = parts.map(p => {
+                    return `<option value="${p.id}">${p.name} ($${p.raw?.price || 0})</option>`;
                 }).join('');
 
-                // Select the newest active one by default if possible
-                const activeParts = parts.filter(p => p.active);
-                if (activeParts.length > 0) {
-                    el.value = activeParts[activeParts.length - 1].id;
-                } else {
-                    el.value = parts[parts.length - 1].id;
+                if (type === 'GPU') {
+                    html = `<option value="">Integrated Graphics (None)</option>` + html;
                 }
+
+                el.innerHTML = html;
+
+                el.value = parts[parts.length - 1].id;
             }
         };
 
@@ -325,6 +351,9 @@ window.desktop = {
         const ram = getPart('sys-ram');
         const gpu = getPart('sys-gpu');
         const sto = getPart('sys-storage');
+
+        const ramQty = parseInt(document.getElementById('sys-ram-qty').value) || 1;
+        const stoQty = parseInt(document.getElementById('sys-storage-qty').value) || 1;
 
         // Fetch Generic Parts
         const chassis = this.chassis_opts[document.getElementById('sys-case').value];
@@ -354,13 +383,20 @@ window.desktop = {
             const moboSize = sizes[mobo.raw.form] || 0;
 
             if (moboSize > caseSize) errors.push(`Fit Issue: ${mobo.raw.form} mobo won't fit in ${chassis.type} case`);
+            
+            // Slot Limit Check
+            const moboSlots = { 'ITX': 2, 'mATX': 4, 'ATX': 7, 'E-ATX': 8 }[mobo.raw.form] || 3;
+            const usedSlots = (gpu ? 1 : 0) + ramQty + stoQty;
+            if (usedSlots > moboSlots) {
+                errors.push(`Slot Limit Exceeded: Motherboard has ${moboSlots} slots, but ${usedSlots} parts are installed (1 GPU + ${ramQty} RAM + ${stoQty} SSDs).`);
+            }
         }
 
         // 3. POWER & THERMALS
         // Summing TDPs (fallback to 0 if part missing)
         const cpuTDP = cpu ? (cpu.raw.tdp || 65) : 0;
         const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0; // GPU might not have tdp in raw if old version, assume safe default
-        const sysOverhead = 50; // Fans, drives, mobo
+        const sysOverhead = 50 + (ramQty * 3) + (stoQty * 5); // Fans, drives, mobo, ram
 
         const totalWatts = cpuTDP + gpuTDP + sysOverhead;
         const psuWatts = psu ? psu.watts : 0;
@@ -412,7 +448,7 @@ window.desktop = {
         }
 
         // 5. COST ANALYSIS
-        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + (mobo?.raw.price || 0);
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + ((ram?.raw.price || 0) * ramQty) + ((sto?.raw.price || 0) * stoQty) + (mobo?.raw.price || 0);
         const totalCost = Math.ceil(partsCost * 1.10);
 
         const sellPrice = parseFloat(document.getElementById('sys-price').value) || 0;
@@ -519,11 +555,14 @@ window.desktop = {
 
         // Gather names for the spec sheet
         const p = physics.parts;
+        const ramQty = parseInt(document.getElementById('sys-ram-qty').value) || 1;
+        const stoQty = parseInt(document.getElementById('sys-storage-qty').value) || 1;
+
         const specs = {
             "CPU": p.cpu ? p.cpu.name : "None",
             "GPU": p.gpu ? p.gpu.name : "Integrated",
-            "RAM": p.ram ? `${p.ram.name} (${p.ram.specs.Capacity})` : "None",
-            "Storage": p.sto ? `${p.sto.name} (${p.sto.specs.Capacity})` : "None",
+            "RAM": p.ram ? `${ramQty}x ${p.ram.name}` : "None",
+            "Storage": p.sto ? `${stoQty}x ${p.sto.name}` : "None",
             "Score": Math.floor(physics.effectivePerf),
             "Cost": physics.totalCost,
             "Profit": meta.price - physics.totalCost
@@ -539,8 +578,10 @@ window.desktop = {
                 cpu: p.cpu?.id,
                 gpu: p.gpu?.id,
                 ram: p.ram?.id,
+                ramQty: ramQty,
                 mobo: p.mobo?.id,
-                storage: p.sto?.id
+                storage: p.sto?.id,
+                stoQty: stoQty
             },
             ...meta
         });

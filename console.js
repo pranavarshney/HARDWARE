@@ -86,19 +86,39 @@ window.consoleArch = {
                         <label>Motherboard</label>
                         <select id="con-mobo" class="part-selector"></select>
                     </div>
-                    <div class="input-group" style="margin-top:10px;">
-                        <label>Shared Memory (GDDR)</label>
-                        <select id="con-ram" class="part-selector"></select>
+                    <div style="display:grid; grid-template-columns: 1fr 2fr; gap:10px; margin-top:10px;">
+                        <div class="input-group">
+                            <label>GDDR Qty</label>
+                            <select id="con-ram-qty">
+                                <option value="1">1x Module</option>
+                                <option value="2">2x Modules</option>
+                                <option value="4">4x Modules</option>
+                                <option value="8" selected>8x Modules</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Shared Memory (GDDR)</label>
+                            <select id="con-ram" class="part-selector"></select>
+                        </div>
                     </div>
                 </div>
 
                 <div class="panel">
                     <h3>User Experience</h3>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div style="display:grid; grid-template-columns: 1fr 2fr; gap:10px;">
+                        <div class="input-group">
+                            <label>Internal Storage Qty</label>
+                            <select id="con-storage-qty">
+                                <option value="1">1x Drive</option>
+                                <option value="2">2x Drives</option>
+                            </select>
+                        </div>
                         <div class="input-group">
                             <label>Internal Storage</label>
                             <select id="con-storage" class="part-selector"></select>
                         </div>
+                    </div>
                         <div class="input-group">
                             <label>Controller</label>
                             <select id="con-controller" onchange="window.consoleArch.updatePhysics()">
@@ -264,7 +284,9 @@ window.consoleArch = {
             set('con-gpu', raw.components.gpu);
             set('con-mobo', raw.components.mobo);
             set('con-ram', raw.components.ram);
+            set('con-ram-qty', raw.components.ramQty || 1);
             set('con-storage', raw.components.storage);
+            set('con-storage-qty', raw.components.stoQty || 1);
         }
         this.updatePhysics();
     },
@@ -277,23 +299,27 @@ window.consoleArch = {
         const fill = (id, type) => {
             const el = document.getElementById(id);
             if (!el) return;
-            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
+            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase() && i.active === true);
             if (parts.length === 0) {
-                el.innerHTML = `<option value="">No ${type}s Found</option>`;
+                if (type === 'GPU') {
+                    el.innerHTML = `<option value="">Integrated Graphics (None)</option>`;
+                } else {
+                    el.innerHTML = `<option value="">No ${type}s Found</option>`;
+                }
             } else {
-                el.innerHTML = parts.map(p => {
-                    const status = p.active ? "" : " (Archived)";
+                let html = parts.map(p => {
                     let extra = "";
                     if (type === 'Motherboard') extra = ` | ${p.specs.Form}`;
-                    return `<option value="${p.id}">${p.name}${status}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
+                    return `<option value="${p.id}">${p.name}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
                 }).join('');
 
-                const activeParts = parts.filter(p => p.active);
-                if (activeParts.length > 0) {
-                    el.value = activeParts[activeParts.length - 1].id;
-                } else {
-                    el.value = parts[parts.length - 1].id;
+                if (type === 'GPU') {
+                    html = `<option value="">Integrated Graphics (None)</option>` + html;
                 }
+
+                el.innerHTML = html;
+
+                el.value = parts[parts.length - 1].id;
             }
         };
 
@@ -321,6 +347,9 @@ window.consoleArch = {
         const ram = getPart('con-ram');
         const sto = getPart('con-storage');
 
+        const ramQty = parseInt(document.getElementById('con-ram-qty').value) || 1;
+        const stoQty = parseInt(document.getElementById('con-storage-qty').value) || 1;
+
         const chassis = this.chassis_opts[document.getElementById('con-case').value];
         const controller = this.controller_opts[document.getElementById('con-controller').value];
         const cooler = this.cooling_opts[document.getElementById('con-cool').value];
@@ -332,11 +361,18 @@ window.consoleArch = {
         const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0;
 
         const socTDP = (cpuTDP + gpuTDP) * 0.85; // Optimization bonus
-        const totalWatts = socTDP + 30; // 30W for board, drive, wifi
+        const totalWatts = socTDP + 30 + (ramQty * 2) + (stoQty * 4); // 30W for board, drive, wifi, plus RAM/SSD modules
 
         let errors = [];
 
         if (mobo && mobo.raw.form !== 'Console Board') errors.push("Motherboard must be a Console Board Form Factor!");
+        
+        // Slot limit: Consoles have very tight integration. Max 10 slots typically (8 memory dies, 2 SSD slots).
+        const moboSlots = 10; 
+        const usedSlots = ramQty + stoQty;
+        if (usedSlots > moboSlots) {
+            errors.push(`Slot Limit Exceeded: Console board has limit of ${moboSlots} storage/memory modules, but ${usedSlots} are occupied.`);
+        }
 
         if (totalWatts > psuWatts) errors.push(`PSU Weak: Needs ${Math.floor(totalWatts)}W, has ${psuWatts}W`);
 
@@ -351,7 +387,7 @@ window.consoleArch = {
 
         // --- C. COST & LOSS LEADER MATH ---
         const moboCost = mobo ? (mobo.raw.price || 0) : 0;
-        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + moboCost;
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + ((ram?.raw.price || 0) * ramQty) + ((sto?.raw.price || 0) * stoQty) + moboCost;
         const manufacturingCost = Math.ceil(partsCost * 1.10);
         const sellPrice = parseFloat(document.getElementById('con-price').value) || 0;
         const profit = sellPrice - manufacturingCost;
@@ -459,9 +495,12 @@ window.consoleArch = {
         }
 
         const p = physics.parts;
+        const ramQty = parseInt(document.getElementById('con-ram-qty').value) || 1;
+        const stoQty = parseInt(document.getElementById('con-storage-qty').value) || 1;
+
         const specs = {
             "SoC": `${p.cpu ? p.cpu.name : 'Unknown'} + ${p.gpu ? p.gpu.name : 'Unknown'}`,
-            "Memory": p.ram ? `${p.ram.specs.Capacity} Unified` : "None",
+            "Memory": p.ram ? `${ramQty}x ${p.ram.specs.Capacity} Unified` : "None",
             "Perf": `${Math.floor(physics.consolePerf)} T-Ops`,
             "Strategy": physics.stratText,
             "Profit": physics.profit
@@ -476,8 +515,10 @@ window.consoleArch = {
                 cpu: p.cpu?.id,
                 gpu: p.gpu?.id,
                 ram: p.ram?.id,
+                ramQty: ramQty,
                 mobo: p.mobo?.id,
-                storage: p.sto?.id
+                storage: p.sto?.id,
+                stoQty: stoQty
             },
             ...meta
         });

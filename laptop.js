@@ -102,13 +102,33 @@ window.laptop = {
                             <label>Motherboard</label>
                             <select id="lap-mobo" class="part-selector"></select>
                         </div>
-                        <div class="input-group">
-                            <label>Memory (RAM)</label>
-                            <select id="lap-ram" class="part-selector"></select>
+                        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:10px;">
+                            <div class="input-group">
+                                <label>RAM Qty</label>
+                                <select id="lap-ram-qty">
+                                    <option value="1">1x Module</option>
+                                    <option value="2" selected>2x Modules</option>
+                                    <option value="4">4x Modules</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Memory (RAM)</label>
+                                <select id="lap-ram" class="part-selector"></select>
+                            </div>
                         </div>
-                        <div class="input-group">
-                            <label>Storage</label>
-                            <select id="lap-storage" class="part-selector"></select>
+                        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:10px;">
+                            <div class="input-group">
+                                <label>Drive Qty</label>
+                                <select id="lap-storage-qty">
+                                    <option value="1">1x Drive</option>
+                                    <option value="2">2x Drives</option>
+                                    <option value="3">3x Drives</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Storage</label>
+                                <select id="lap-storage" class="part-selector"></select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -267,7 +287,9 @@ window.laptop = {
             set('lap-gpu', raw.components.gpu);
             set('lap-mobo', raw.components.mobo);
             set('lap-ram', raw.components.ram);
+            set('lap-ram-qty', raw.components.ramQty || 1);
             set('lap-storage', raw.components.storage);
+            set('lap-storage-qty', raw.components.stoQty || 1);
             set('lap-display', raw.components.disp);
             set('lap-camera', raw.components.cam);
         }
@@ -283,8 +305,8 @@ window.laptop = {
             const el = document.getElementById(id);
             if (!el) return;
 
-            // Get all parts of this type (including inactive)
-            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
+            // Get all active parts of this type
+            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase() && i.active === true);
 
             if (parts.length === 0) {
                 // Special handling for Optional GPU
@@ -298,8 +320,7 @@ window.laptop = {
                     let extra = "";
                     if (type === 'Display') extra = ` | ${p.specs.Resolution} ${p.specs.HDR}`;
                     if (type === 'Motherboard') extra = ` | ${p.specs.Form}`;
-                    const status = p.active ? "" : " (Archived)";
-                    return `<option value="${p.id}">${p.name}${status}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
+                    return `<option value="${p.id}">${p.name}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
                 }).join('');
 
                 // For GPU, add an "Integrated" option at the top
@@ -309,13 +330,7 @@ window.laptop = {
 
                 el.innerHTML = html;
 
-                // Default select the newest active
-                const activeParts = parts.filter(p => p.active);
-                if (activeParts.length > 0) {
-                    el.value = activeParts[activeParts.length - 1].id;
-                } else {
-                    el.value = parts[parts.length - 1].id;
-                }
+                el.value = parts[parts.length - 1].id;
             }
         };
 
@@ -347,6 +362,9 @@ window.laptop = {
         const sto = getPart('lap-storage');
         const disp = getPart('lap-display');
         const cam = getPart('lap-camera');
+
+        const ramQty = parseInt(document.getElementById('lap-ram-qty').value) || 1;
+        const stoQty = parseInt(document.getElementById('lap-storage-qty').value) || 1;
 
         // Get Chassis & Power
         const chassisKey = document.getElementById('lap-chassis').value;
@@ -391,7 +409,7 @@ window.laptop = {
 
         // Idle / Light Load Power
         const cpuIdle = cpuTDP * 0.15; // Modern CPUs idle well
-        const sysOverhead = 3.0; // WiFi, RAM, NVMe
+        const sysOverhead = 3.0 + (ramQty * 1.5) + (stoQty * 2.0); // WiFi, RAM, NVMe
         const avgLoad = cpuIdle + dispPwr + sysOverhead;
 
         // Gaming Load Power (for Charger check)
@@ -418,7 +436,7 @@ window.laptop = {
 
         // --- E. COST & PROFIT ---
         const moboCost = mobo ? (mobo.raw.price || 0) : 0;
-        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + (ram?.raw.price || 0) + (sto?.raw.price || 0) + (cam?.raw.price || 0) + (disp?.raw.price || 0) + moboCost + battery.cost + chassis.cost;
+        const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + ((ram?.raw.price || 0) * ramQty) + ((sto?.raw.price || 0) * stoQty) + (cam?.raw.price || 0) + (disp?.raw.price || 0) + moboCost + battery.cost + chassis.cost;
         const totalCost = Math.ceil(partsCost * 1.10);
         const sellPrice = parseFloat(document.getElementById('lap-price').value) || 0;
         const profit = sellPrice - totalCost;
@@ -446,6 +464,13 @@ window.laptop = {
         let errors = [];
         if (disp && disp.raw.size > 18) errors.push("Display too huge for Laptop!");
         if (mobo && mobo.raw.form !== 'Laptop Board') errors.push("Motherboard must be a Laptop Board Form Factor!");
+        
+        // Slot checks limit (Laptops generally have fewer slots)
+        const moboSlots = 3; // Laptops generally max out at 3 total slots or so (e.g. 2 RAM, 1 SSD)
+        const usedSlots = (gpu ? 1 : 0) + ramQty + stoQty;
+        if (usedSlots > moboSlots) {
+            errors.push(`Slot Limit Exceeded: Laptop board has ${moboSlots} slots, but ${usedSlots} are occupied (1 GPU + ${ramQty} RAM + ${stoQty} SSDs).`);
+        }
 
         return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: { cpu, mobo, gpu, ram, sto, disp }, batteryLife };
     },
@@ -539,12 +564,15 @@ window.laptop = {
             year: meta.year,
             price: meta.price,
             specs: specs,
+            // Save IDs of components so we can reference them later if needed
             components: {
                 cpu: p.cpu?.id,
                 gpu: p.gpu?.id,
                 ram: p.ram?.id,
+                ramQty: document.getElementById('lap-ram-qty') ? parseInt(document.getElementById('lap-ram-qty').value) : 1,
                 mobo: p.mobo?.id,
                 storage: p.sto?.id,
+                stoQty: document.getElementById('lap-storage-qty') ? parseInt(document.getElementById('lap-storage-qty').value) : 1,
                 disp: p.disp?.id,
                 cam: p.cam?.id
             },

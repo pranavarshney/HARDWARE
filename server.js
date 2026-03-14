@@ -130,15 +130,16 @@ window.server = {
                             <label><input type="checkbox" id="srv-red-raid"> Storage RAID 1/10</label>
                         </div>
                     </div>
+                    
+                    <div class="input-group" style="margin-top:10px;">
+                        <label>Nodes per Rack</label>
+                        <input type="number" id="srv-density" value="20" min="1" max="100">
+                    </div>
                 </div>
 
                 <div class="panel" id="panel-scale" style="display:none;">
                     <h3>Scale & Infra</h3>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
-                            <label>Nodes per Rack</label>
-                            <input type="number" id="srv-density" value="20" min="1" max="100">
-                        </div>
+                    <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
                         <div class="input-group">
                             <label>Total Racks</label>
                             <input type="number" id="srv-racks" value="4" min="1" max="5000">
@@ -260,8 +261,9 @@ window.server = {
         setCheck('srv-red-nic', raw.isRedNic);
         setCheck('srv-red-raid', raw.isRaid);
 
+        set('srv-density', raw.nodesPerRack);
+
         if (raw.srvClass === 'Supercomputer') {
-            set('srv-density', raw.nodesPerRack);
             set('srv-racks', raw.rackCount);
             set('srv-rack', raw.rack);
             set('srv-cool', raw.cooling);
@@ -282,24 +284,28 @@ window.server = {
         const fill = (id, type) => {
             const el = document.getElementById(id);
             if (!el) return;
-            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase());
+            const parts = db.inventory.filter(i => i.type.toLowerCase() === type.toLowerCase() && i.active === true);
 
             if (parts.length === 0) {
-                el.innerHTML = `<option value="">No ${type}s available</option>`;
+                if (type === 'GPU') {
+                    el.innerHTML = `<option value="">No Accelerators (CPU Only)</option>`;
+                } else {
+                    el.innerHTML = `<option value="">No ${type}s available</option>`;
+                }
             } else {
-                el.innerHTML = parts.map(p => {
-                    const status = p.active ? "" : " (Archived)";
+                let html = parts.map(p => {
                     let extra = "";
                     if (type === 'RAM' || type === 'Storage') extra = ` | ${p.specs.Capacity || ''}`;
-                    return `<option value="${p.id}">${p.name}${status}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
+                    return `<option value="${p.id}">${p.name}${extra} ($${p.raw?.price || Math.floor(p.price) || 0})</option>`;
                 }).join('');
 
-                const activeParts = parts.filter(p => p.active);
-                if (activeParts.length > 0) {
-                    el.value = activeParts[activeParts.length - 1].id;
-                } else {
-                    el.value = parts[parts.length - 1].id;
+                if (type === 'GPU') {
+                    html = `<option value="">No Accelerators (CPU Only)</option>` + html;
                 }
+
+                el.innerHTML = html;
+
+                el.value = parts[parts.length - 1].id;
             }
         };
 
@@ -367,7 +373,7 @@ window.server = {
 
         if (!inputs.rackDef) return null;
 
-        const totalNodes = inputs.srvClass === 'Prebuilt' ? 1 : inputs.nodesPerRack * inputs.rackCount;
+        const totalNodes = inputs.srvClass === 'Prebuilt' ? inputs.nodesPerRack : inputs.nodesPerRack * inputs.rackCount;
 
         // Space Calc
         let nodeU = 1;
@@ -473,13 +479,17 @@ window.server = {
         const psuCostSum = inputs.isRedPsu ? inputs.psuDef.cost * 2 : inputs.psuDef.cost;
         const nicCostSum = inputs.isRedNic ? inputs.nicDef.cost * 2 : inputs.nicDef.cost;
 
-        const nodePartsCost = (cpuCost * inputs.cpuQty) + (gpuCost * inputs.gpuQty) + (ramCost * inputs.ramQty) + (stoCost * inputs.stoQty) + nicCostSum + psuCostSum;
+        const nodePartsCost = ((cpuCost * inputs.cpuQty) + (gpuCost * inputs.gpuQty) + (ramCost * inputs.ramQty) + (stoCost * inputs.stoQty) + nicCostSum + psuCostSum);
+        
+        const racksCost = (inputs.rackDef.cost * inputs.rackCount);
+        const coolingCost = (inputs.cooling.costPerKw * (clusterRawWatts / 1000));
+        const networkCost = (inputs.topology.costPerNode * totalNodes);
 
-        const totalInfraCost = (inputs.rackDef.cost * inputs.rackCount) + (inputs.cooling.costPerKw * (clusterRawWatts / 1000)) + (inputs.topology.costPerNode * totalNodes);
+        const totalInfraCost = racksCost + coolingCost + networkCost;
 
-        const totalProjectCost = inputs.srvClass === 'Prebuilt' ? nodePartsCost : Math.ceil((nodePartsCost * totalNodes) + totalInfraCost);
+        const totalProjectCost = inputs.srvClass === 'Prebuilt' ? prebuiltTotalPartsCost : Math.ceil((nodePartsCost * totalNodes) + totalInfraCost);
 
-        const margin = inputs.srvClass === 'Prebuilt' ? inputs.price - nodePartsCost : 0;
+        const margin = inputs.srvClass === 'Prebuilt' ? inputs.price - prebuiltTotalPartsCost : 0;
 
         return {
             inputs,
@@ -488,7 +498,7 @@ window.server = {
             finalPsuEff, psuLoadStr, throttle, thermalStatus, heatColor,
             nodeTflops, clusterTFLOPS, scaleFactor, ranking,
             uptime, requestedChannels, maxChannelsPerSocket,
-            nodePartsCost, totalInfraCost, totalProjectCost, margin
+            nodePartsCost, prebuiltTotalPartsCost, racksCost, coolingCost, networkCost, totalInfraCost, totalProjectCost, margin
         };
     },
 
@@ -541,15 +551,16 @@ window.server = {
             let perfLabel = stats.clusterTFLOPS > 1000 ? (stats.clusterTFLOPS / 1000).toFixed(2) + " PFLOPS" : stats.clusterTFLOPS.toFixed(1) + " TFLOPS";
 
             if (stats.inputs.srvClass === 'Prebuilt') {
-                const margin = stats.inputs.price - stats.nodePartsCost;
+                const margin = stats.inputs.price - stats.totalProjectCost;
                 const marginColor = margin > 0 ? '#00e676' : '#ff1744';
 
                 display.innerHTML = `
+                    <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Nodes:</span> <b>${stats.totalNodes}</b></li>
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Compute:</span> <b style="color:var(--accent)">${perfLabel}</b></li>
-                    <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Power Draw:</span> <b>${stats.rawNodeWatts.toFixed(0)} W</b></li>
+                    <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Power Draw:</span> <b>${stats.clusterRawWatts.toFixed(0)} W</b></li>
                     <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Node Uptime:</span> <b style="color:#00e676">${stats.uptime.toFixed(3)}%</b></li>
                     <li style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between;">
-                        <span>Mfg Cost:</span> <span style="color:#ffaa00">$${stats.nodePartsCost.toFixed(2)}</span>
+                        <span>Mfg Cost:</span> <span style="color:#ffaa00">$${stats.totalProjectCost.toFixed(2)}</span>
                     </li>
                     <li style="display:flex; justify-content:space-between; font-size:0.9rem;">
                         <span>Retail Price:</span> <b>$${stats.inputs.price.toFixed(2)}</b>
@@ -570,6 +581,17 @@ window.server = {
                     
                     <li style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; font-size:1.1rem;">
                         <span>CapEx Cost:</span> <span style="color:#ff1744">-$${(stats.totalProjectCost / 1000000).toFixed(2)}M</span>
+                    </li>
+                    <li style="margin-top:6px; padding-top:6px;">
+                        <details style="font-size:0.75rem; color:#888;">
+                            <summary style="cursor:pointer; color:#aaa;">Show Cost Breakdown</summary>
+                            <div style="padding-left:10px; margin-top:5px; border-left:1px solid #444;">
+                                <div style="display:flex; justify-content:space-between;"><span>Compute Nodes (${stats.totalNodes}):</span> <span>$${((stats.prebuiltTotalPartsCost) / 1000000).toFixed(2)}M</span></div>
+                                <div style="display:flex; justify-content:space-between;"><span>Rack Enclosures (${stats.inputs.rackCount}):</span> <span>$${(stats.racksCost).toLocaleString()}</span></div>
+                                <div style="display:flex; justify-content:space-between;"><span>Cooling (${stats.inputs.cooling.costPerKw}/kW):</span> <span>$${(stats.coolingCost).toLocaleString()}</span></div>
+                                <div style="display:flex; justify-content:space-between;"><span>Network (${stats.inputs.topology.costPerNode}/Node):</span> <span>$${(stats.networkCost).toLocaleString()}</span></div>
+                            </div>
+                        </details>
                     </li>
                 `;
             }
@@ -753,7 +775,7 @@ window.server = {
         const specs = {
             "Class": stats.inputs.srvClass,
             "Compute": perfLabel,
-            "Draw": stats.inputs.srvClass === 'Supercomputer' ? `${(stats.totalFacWatts / 1000000).toFixed(2)} MW` : `${stats.rawNodeWatts.toFixed(0)} W`,
+            "Draw": stats.inputs.srvClass === 'Supercomputer' ? `${(stats.totalFacWatts / 1000000).toFixed(2)} MW` : `${stats.clusterRawWatts.toFixed(0)} W`,
             "Ranking": stats.inputs.srvClass === 'Supercomputer' ? stats.ranking : "N/A"
         };
 
@@ -763,7 +785,7 @@ window.server = {
             price: stats.inputs.srvClass === 'Prebuilt' ? stats.inputs.price : 0,
             specs: specs,
             ...meta,
-            rawCost: stats.inputs.srvClass === 'Prebuilt' ? stats.nodePartsCost : stats.totalProjectCost,
+            rawCost: stats.inputs.srvClass === 'Prebuilt' ? stats.totalProjectCost : stats.totalProjectCost,
             score: stats.clusterTFLOPS
         });
 
