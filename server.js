@@ -319,7 +319,7 @@ window.server = {
 
     getPartScore: function (part) {
         if (!part) return 0;
-        if (part.raw && part.raw.benchmarks) {
+        if (part.raw?.benchmarks) {
             return part.raw.benchmarks.multiScore || part.raw.benchmarks.score || part.score || 0;
         }
         return part.score || 0;
@@ -387,8 +387,8 @@ window.server = {
         const facilityArea = rackFloorArea * inputs.rackCount;
 
         // Power Calc
-        const cpuWatts = inputs.cpu ? (inputs.cpu.raw.tdp || 100) : 100;
-        const gpuWatts = inputs.gpu ? (inputs.gpu.raw.tdp || 250) : 250;
+        const cpuWatts = inputs.cpu ? (inputs.cpu.raw?.tdp || 100) : 100;
+        const gpuWatts = inputs.gpu ? (inputs.gpu.raw?.tdp || 250) : 250;
         const rawNodeWatts = (cpuWatts * inputs.cpuQty) + (gpuWatts * inputs.gpuQty) +
             (4 * inputs.ramQty) + (6 * inputs.stoQty) +
             (inputs.isRedNic ? inputs.nicDef.watts * 2 : inputs.nicDef.watts);
@@ -430,7 +430,7 @@ window.server = {
         const requestedChannels = inputs.ramQty / inputs.cpuQty;
         const actualChannels = Math.min(maxChannelsPerSocket, requestedChannels);
 
-        const ramSpeed = inputs.ram ? (inputs.ram.raw.speed || 3200) : 3200;
+        const ramSpeed = inputs.ram ? (inputs.ram.raw?.speed || 3200) : 3200;
         const memBandwidthBg = (actualChannels * ramSpeed * 8) / 1000; // GB/s approx
         const bandwidthBonus = Math.min(2.0, memBandwidthBg / 100);
 
@@ -471,10 +471,10 @@ window.server = {
         let uptime = nodeUptimePct * 100;
 
         // Financials (OpEx Model)
-        const cpuCost = inputs.cpu ? (inputs.cpu.raw.price || 0) : 0;
-        const gpuCost = inputs.gpu ? (inputs.gpu.raw.price || 0) : 0;
-        const ramCost = inputs.ram ? (inputs.ram.raw.price || 0) : 0;
-        const stoCost = inputs.sto ? (inputs.sto.raw.price || 0) : 0;
+        const cpuCost = inputs.cpu ? (inputs.cpu.raw?.price || 0) : 0;
+        const gpuCost = inputs.gpu ? (inputs.gpu.raw?.price || 0) : 0;
+        const ramCost = inputs.ram ? (inputs.ram.raw?.price || 0) : 0;
+        const stoCost = inputs.sto ? (inputs.sto.raw?.price || 0) : 0;
 
         const psuCostSum = inputs.isRedPsu ? inputs.psuDef.cost * 2 : inputs.psuDef.cost;
         const nicCostSum = inputs.isRedNic ? inputs.nicDef.cost * 2 : inputs.nicDef.cost;
@@ -487,7 +487,8 @@ window.server = {
 
         const totalInfraCost = racksCost + coolingCost + networkCost;
 
-        const totalProjectCost = inputs.srvClass === 'Prebuilt' ? prebuiltTotalPartsCost : Math.ceil((nodePartsCost * totalNodes) + totalInfraCost);
+        const prebuiltTotalPartsCost = nodePartsCost * totalNodes;
+        const totalProjectCost = inputs.srvClass === 'Prebuilt' ? prebuiltTotalPartsCost : Math.ceil(prebuiltTotalPartsCost + totalInfraCost);
 
         const margin = inputs.srvClass === 'Prebuilt' ? inputs.price - prebuiltTotalPartsCost : 0;
 
@@ -660,7 +661,7 @@ window.server = {
             } else if (type === 'IO500') {
                 // Incorporate actual drive capacity/speed logic if possible.
                 // Fallback to simple multiplier based on Drive class (assumed NVMe vs SATA by price).
-                const pricePerDrive = stats.inputs.sto ? stats.inputs.sto.raw.price || 50 : 50;
+                const pricePerDrive = stats.inputs.sto ? stats.inputs.sto.raw?.price || 50 : 50;
                 const driveBaseSpeed = pricePerDrive > 200 ? 7.0 : 1.5; // NVMe ~7GB/s, SATA ~1.5GB/s
                 const raidMulti = stats.inputs.isRaid ? 1.5 : 1.0; // RAID gives stripe speed bonus
                 score = (stats.inputs.stoQty * driveBaseSpeed * stats.totalNodes * raidMulti) * stats.scaleFactor * randomVar;
