@@ -46,7 +46,8 @@ window.server = {
     // --- 2. RENDER UI ---
     render: function (container) {
         if (!container) return;
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -65,7 +66,7 @@ window.server = {
                         <input type="text" id="srv-name" value="Titan Cluster A1">
                     </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Commission Year</label>
                             <input type="number" id="srv-year" value="${currentYear}">
                         </div>
@@ -244,7 +245,6 @@ window.server = {
 
         set('srv-class', raw.srvClass || 'Prebuilt');
         set('srv-name', raw.name);
-        set('srv-year', raw.year);
         set('srv-price', raw.price);
 
         set('srv-cpu-qty', raw.cpuQty);
@@ -601,9 +601,11 @@ window.server = {
 
     scrapeData: function () {
         const get = (id) => document.getElementById(id)?.value || '';
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
         return {
             name: document.getElementById('srv-name').value,
-            year: parseFloat(document.getElementById('srv-year').value),
+            year: currentYear,
             price: parseFloat(document.getElementById('srv-price').value || 9999),
             srvClass: document.getElementById('srv-class').value,
             cpuQty: get('srv-cpu-qty'), cpu: get('srv-cpu'),

@@ -34,7 +34,8 @@ window.desktop = {
     // --- 2. RENDER UI ---
     render: function (container) {
         if (!container) return;
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -66,7 +67,7 @@ window.desktop = {
                                 ${this.renderOptions(this.chassis_opts)}
                             </select>
                         </div>
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="sys-year" value="${currentYear}">
                         </div>
@@ -275,7 +276,6 @@ window.desktop = {
 
         set('sys-name-version', raw.versionName || "");
         setCheck('sys-hide-storefront', raw.hideStorefront);
-        set('sys-year', raw.year);
         set('sys-price', raw.price);
         if (raw.case) set('sys-case', raw.case);
         if (raw.psu) set('sys-psu', raw.psu);
@@ -486,12 +486,15 @@ window.desktop = {
         const versionName = document.getElementById('sys-name-version').value;
         const fullName = `${modelName} ${versionName}`.trim();
 
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
+
         return {
             modelName: modelName,
             versionName: versionName,
             name: fullName,
             hideStorefront: document.getElementById('sys-hide-storefront') ? document.getElementById('sys-hide-storefront').checked : false,
-            year: parseFloat(document.getElementById('sys-year').value),
+            year: currentYear,
             price: parseFloat(document.getElementById('sys-price').value),
             case: document.getElementById('sys-case') ? document.getElementById('sys-case').value : '',
             psu: document.getElementById('sys-psu') ? document.getElementById('sys-psu').value : '',

@@ -37,7 +37,12 @@
             <span class="logo-text">HARDWARE TYCOON</span>
         </div>
 
-        <div class="nav-modes">
+        <div class="nav-modes" style="display:flex; align-items:center;">
+            <div class="time-controls" style="display:flex; align-items:center; gap:10px; margin-right:15px; background:rgba(0,0,0,0.4); padding:4px 10px; border-radius:8px; border:1px solid var(--border-light); height:32px;">
+                <button onclick="window.sys.prevQuarter()" title="Undo / Previous Quarter" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem; padding:0 5px; transition:color 0.2s;">◄</button>
+                <div id="game-time-display" style="font-family:var(--font-mono); font-size:0.9rem; font-weight:bold; color:var(--accent); min-width:70px; text-align:center;">2010 Q1</div>
+                <button onclick="window.sys.nextQuarter()" title="Next Quarter" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem; padding:0 5px; transition:color 0.2s;">►</button>
+            </div>
             <button id="btn-current" class="nav-main active">CURRENT PRODUCTS</button>
             <button id="btn-all" class="nav-main">ALL PRODUCTS</button>
             <button class="nav-main" onclick="window.sys.startNewSave()" style="color:#ff4444; border-color:rgba(255,68,68,0.3);">START NEW SAVE</button>
@@ -350,6 +355,7 @@
 
         // Trigger initial load directly into Storefront
         window.addEventListener('DOMContentLoaded', () => {
+            if (window.sys && window.sys.updateTimeDisplay) window.sys.updateTimeDisplay();
             transitionWorkspace();
         });
     </script>

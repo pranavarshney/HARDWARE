@@ -19,7 +19,8 @@ window.mobo = {
         if (!container) return;
 
         // Default year
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -137,7 +138,7 @@ window.mobo = {
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Simulation</h3>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="mobo-year" value="${currentYear}">
                         </div>
@@ -296,7 +297,6 @@ window.mobo = {
         set('mobo-layers', raw.layers);
         set('mobo-cool', raw.cool);
         set('mobo-price', raw.price);
-        set('mobo-year', raw.year);
 
         this.updatePhysics();
     },
@@ -382,6 +382,9 @@ window.mobo = {
         const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('mobo-name-model-new').value : modelSelect.value) : "Unknown";
         const version = document.getElementById('mobo-name-version') ? document.getElementById('mobo-name-version').value : "";
 
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
+
         return {
             modelName: model,
             versionName: version,
@@ -396,7 +399,7 @@ window.mobo = {
             cool: get('mobo-cool'),
             layers: get('mobo-layers'),
             price: get('mobo-price'),
-            year: get('mobo-year')
+            year: currentYear
         };
     },
 

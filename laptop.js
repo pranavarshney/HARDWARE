@@ -26,7 +26,8 @@ window.laptop = {
     // --- 2. RENDER UI ---
     render: function (container) {
         if (!container) return;
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -58,7 +59,7 @@ window.laptop = {
                                 ${this.renderOptions(this.chassis_opts)}
                             </select>
                         </div>
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="lap-year" value="${currentYear}">
                         </div>
@@ -275,7 +276,6 @@ window.laptop = {
 
         set('lap-name-version', raw.versionName || "");
         setCheck('lap-hide-storefront', raw.hideStorefront);
-        set('lap-year', raw.year);
         set('lap-price', raw.price);
         if (raw.chassis) set('lap-chassis', raw.chassis);
         if (raw.bat) set('lap-bat', raw.bat);
@@ -482,12 +482,14 @@ window.laptop = {
         }
         const versionName = document.getElementById('lap-name-version').value;
         const fullName = `${modelName} ${versionName}`.trim();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
         return {
             modelName: modelName,
             versionName: versionName,
             name: fullName,
             hideStorefront: document.getElementById('lap-hide-storefront') ? document.getElementById('lap-hide-storefront').checked : false,
-            year: parseFloat(document.getElementById('lap-year').value),
+            year: currentYear,
             price: parseFloat(document.getElementById('lap-price').value),
             chassis: document.getElementById('lap-chassis') ? document.getElementById('lap-chassis').value : '',
             bat: document.getElementById('lap-bat') ? parseFloat(document.getElementById('lap-bat').value) : 50,

@@ -7,10 +7,10 @@ window.gpu = {
 
     // --- 1. PRESETS ---
     presets: {
-        'Entry 1080p': { sh: 1280, clk: 1.8, ipc: 1.0, node: 7, vram: 4, bus: 96, mclk: 12000, tmus: 64, rops: 32, rt: 0, ten: 0, cool: 100, tdp: 120, volt: 0.9, price: 199 },
-        'Mid 1440p': { sh: 3584, clk: 2.1, ipc: 1.2, node: 5, vram: 12, bus: 192, mclk: 16000, tmus: 112, rops: 64, rt: 28, ten: 112, cool: 200, tdp: 200, volt: 1.0, price: 499 },
-        'High 4K': { sh: 8192, clk: 2.5, ipc: 1.3, node: 4, vram: 16, bus: 256, mclk: 20000, tmus: 256, rops: 96, rt: 72, ten: 288, cool: 350, tdp: 320, volt: 1.05, price: 999 },
-        'Flagship AI': { sh: 16384, clk: 2.6, ipc: 1.5, node: 3, vram: 24, bus: 384, mclk: 24000, tmus: 512, rops: 192, rt: 128, ten: 512, cool: 450, tdp: 450, volt: 1.1, price: 1999 }
+        'Entry 1080p': { sh: 1280, clk: 1.8, ipc: 1.0, node: 7, vram: 4, bus: 96, mclk: 12000, tmus: 64, rops: 32, rt: 0, ten: 0, cool: 100, tdp: 120, volt: 0.9, price: 199, res: '1080p', cache: 16, driver: 90, bin: 95 },
+        'Mid 1440p': { sh: 3584, clk: 2.1, ipc: 1.2, node: 5, vram: 12, bus: 192, mclk: 16000, tmus: 112, rops: 64, rt: 28, ten: 112, cool: 200, tdp: 200, volt: 1.0, price: 499, res: '1440p', cache: 48, driver: 95, bin: 100 },
+        'High 4K': { sh: 8192, clk: 2.5, ipc: 1.3, node: 4, vram: 16, bus: 256, mclk: 20000, tmus: 256, rops: 96, rt: 72, ten: 288, cool: 350, tdp: 320, volt: 1.05, price: 999, res: '4K', cache: 64, driver: 100, bin: 105 },
+        'Flagship AI': { sh: 16384, clk: 2.6, ipc: 1.5, node: 3, vram: 24, bus: 384, mclk: 24000, tmus: 512, rops: 192, rt: 128, ten: 512, cool: 450, tdp: 450, volt: 1.1, price: 1999, res: '8K', cache: 96, driver: 105, bin: 110 }
     },
 
     // --- 2. UI RENDERER ---
@@ -18,7 +18,8 @@ window.gpu = {
         if (!container) return;
 
         // Default year
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -91,9 +92,15 @@ window.gpu = {
                             <input type="number" id="gpu-bus" value="352" step="32">
                         </div>
                     </div>
-                    <div class="input-group" style="margin-top:10px;">
-                        <label>Mem Clock (MHz)</label>
-                        <input type="number" id="gpu-mclk" value="11000" step="100">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                        <div class="input-group">
+                            <label>Mem Clock (MHz)</label>
+                            <input type="number" id="gpu-mclk" value="11000" step="100">
+                        </div>
+                        <div class="input-group">
+                            <label>L2/Infinity Cache (MB)</label>
+                            <input type="number" id="gpu-cache" value="16">
+                        </div>
                     </div>
                 </div>
 
@@ -119,6 +126,7 @@ window.gpu = {
                             <input type="number" id="gpu-tensor" value="0">
                         </div>
                     </div>
+
                 </div>
 
                 <div class="panel" style="border-color: var(--accent-secondary);">
@@ -137,11 +145,7 @@ window.gpu = {
 
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Pricing</h3>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
-                            <label>Launch Year</label>
-                            <input type="number" id="gpu-year" value="${currentYear}">
-                        </div>
+                    <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
                         <div class="input-group">
                             <label>Price ($)</label>
                             <input type="number" id="gpu-price" value="699">
@@ -256,10 +260,12 @@ window.gpu = {
 
         set('gpu-shaders', p.sh); set('gpu-clock', p.clk); set('gpu-ipc', p.ipc);
         set('gpu-node', p.node); set('gpu-vram', p.vram); set('gpu-bus', p.bus);
-        set('gpu-mclk', p.mclk); set('gpu-tmus', p.ten); set('gpu-rops', p.rops); // Corrected tmus to ten
+        set('gpu-mclk', p.mclk); set('gpu-tmus', p.tmus); set('gpu-rops', p.rops);
         set('gpu-rt', p.rt); set('gpu-tensor', p.ten);
         set('gpu-cool', p.cool); set('gpu-tdp', p.tdp); set('gpu-volt', p.volt);
         set('gpu-price', p.price);
+        set('gpu-res', p.res || '1440p'); set('gpu-cache', p.cache !== undefined ? p.cache : 16);
+        set('gpu-driver', p.driver || 100); set('gpu-bin', p.bin || 100);
 
         this.updatePreview();
     },
@@ -300,7 +306,6 @@ window.gpu = {
         setCheck('gpu-hide-storefront', raw.hideStorefront);
         set('gpu-node', raw.node);
         set('gpu-price', raw.price);
-        set('gpu-year', raw.year);
         set('gpu-shaders', raw.sh);
         set('gpu-clock', raw.clk);
         set('gpu-ipc', raw.ipc);
@@ -314,6 +319,10 @@ window.gpu = {
         set('gpu-tensor', raw.ten);
         set('gpu-cool', raw.cool);
         set('gpu-tdp', raw.tdp);
+        set('gpu-res', raw.res || '1440p');
+        set('gpu-cache', raw.cache !== undefined ? raw.cache : 16);
+        set('gpu-driver', raw.driver || 100);
+        set('gpu-bin', raw.bin || 100);
 
         this.updatePreview();
     },
@@ -322,49 +331,104 @@ window.gpu = {
     updatePreview: function () {
         const d = this.scrapeData();
 
-        // --- A. MEMORY BOTTLENECK ---
-        // Formula: (Bus Width * Memory Clock) / 8 bits = MB/s -> /1000 = GB/s
-        const bandwidth = (d.bus * d.mclk) / 8000;
+        // --- 14. Bin Quality ---
+        const binQuality = (d.bin || 100) / 100;
 
-        // Core Compute Potential (Raw TFLOPS * IPC)
-        // FIXED: Don't floor this at 1.0, or small GPUs break the ratio
-        const rawCompute = (d.sh * d.clk * 2 * d.ipc) / 1000;
-        const safeCompute = rawCompute > 0 ? rawCompute : 0.0001; // Avoid divide by zero
+        // --- 11. Driver Quality ---
+        const driverEff = (d.driver || 100) / 100;
 
-        // Feed Ratio: GB/s per TFLOP. 
-        // Modern GPUs (RTX 4090) are around 12.0 ratio. Older were 30+.
-        // ADJUSTED: Threshold lowered from 20 to 12 to reflect modern efficiency.
-        const feedRatio = bandwidth / safeCompute;
-        let memPenalty = 1.0;
+        // --- 8. Frequency Scaling Curve ---
+        let boostClock = d.clk * (1 + (d.volt - 1.0) * 0.5) * binQuality;
 
-        if (feedRatio < 12) {
-            // Smoother curve, less punishing immediately
-            memPenalty = Math.max(0.6, feedRatio / 12);
-        }
+        // --- A. HARDWARE SYNERGY & BOTTLENECKS (Physics & Ratio Driven) ---
+        
+        // 1. Raw Compute Baseline (TFLOPS)
+        const rawCompute = (d.sh * boostClock * 2 * (d.ipc || 1.0)) / 1000;
+        const safeCompute = rawCompute > 0 ? rawCompute : 0.0001;
 
-        // --- B. VRAM PENALTY ---
-        // If VRAM is too low for the Compute Power, punish performance.
+        // 2. Effective Bandwidth (Bus + Cache)
+        const rawBandwidth = (d.bus * d.mclk) / 8000;
+        const cacheMB = d.cache || 0;
+        // Cache massively reduces reliance on raw memory bus (e.g., Infinity Cache effect)
+        const cacheMultiplier = 1 + (cacheMB / 32); 
+        const effectiveBandwidth = rawBandwidth * cacheMultiplier;
+
+        // 3. Bandwidth Bottleneck (Does the memory feed the cores fast enough?)
+        // Real-world physics: ~15 GB/s is needed to comfortably feed 1 TFLOP of compute.
+        const requiredBandwidth = safeCompute * 15;
+        const bandwidthEfficiency = Math.min(1.0, effectiveBandwidth / requiredBandwidth);
+
+        // 4. VRAM Capacity Bottleneck (Driven by Compute, not the Year!)
+        // A high-TFLOP card processes heavier textures and larger framebuffers.
+        // Roughly 0.55GB of VRAM is needed per TFLOP for balanced rendering.
+        const requiredVram = Math.max(1.0, safeCompute * 0.55);
         let vramPenalty = 1.0;
-        const requiredVram = rawCompute > 20 ? 12 : (rawCompute > 10 ? 8 : 4);
-
         if (d.vram < requiredVram) {
-            vramPenalty = 1.0 - ((requiredVram - d.vram) * 0.05);
-            vramPenalty = Math.max(0.5, vramPenalty);
+            vramPenalty = Math.max(0.4, d.vram / requiredVram); // Punish severe choking
         }
 
-        // --- C. POWER & THERMALS ---
-        const effFactor = Math.sqrt(14 / d.node);
+        // 5. Pipeline Bottleneck (ROPs & TMUs vs Cores)
+        // Standard architecture ratios: ~1 ROP per 64 shaders, ~1 TMU per 16 shaders.
+        const requiredRops = d.sh / 64;
+        const requiredTmus = d.sh / 16;
+        const ropEfficiency = Math.min(1.0, d.rops / Math.max(1, requiredRops));
+        const tmuEfficiency = Math.min(1.0, d.tmus / Math.max(1, requiredTmus));
+        const pipelineEfficiency = (ropEfficiency * 0.6) + (tmuEfficiency * 0.4);
 
-        // Base Power Components
-        const corePwr = (d.sh * d.clk * Math.pow(d.volt, 2) * 0.004) / effFactor;
-        const memPwr = (d.vram * 0.5) + (bandwidth * 0.1);
-        const socPwr = 25;
+        // 6. Overall Hardware Synergy
+        const hardwareSynergy = bandwidthEfficiency * vramPenalty * pipelineEfficiency;
+        
+        // Ensure bandwidth variable is still exported for the UI to use later
+        const bandwidth = rawBandwidth;
 
-        const totalPwr = corePwr + memPwr + socPwr;
+        // --- C. POWER, THERMALS & SILICON MODEL ---
+        // --- 9. Node Scaling Split ---
+        const densityFactor = Math.sqrt(14 / Math.max(d.node, 1)); 
+        const efficiencyFactor = 14 / Math.max(d.node, 1);         
+        const costFactor = Math.pow(14 / Math.max(d.node, 1), 1.5);
 
-        // Thermal Curve
+        const baseArea = (d.sh * 0.02) + (d.vram * 2) + (d.bus * 0.1) + (d.rt * 0.5) + (d.ten * 0.1) + (cacheMB * 1.5) + 20;
+        const dieArea = baseArea / densityFactor;
+        const defectRate = dieArea / 500;
+        const baseYieldRate = Math.exp(-defectRate);
+        const yieldRate = Math.max(0.01, Math.min(0.99, baseYieldRate * (2 - binQuality)));
+        const waferCost = 3000 * costFactor;
+        const chipsPerWafer = Math.floor(70000 / dieArea);
+        const estCostPerChip = waferCost / Math.max(1, (chipsPerWafer * yieldRate));
+
+        // --- Effective capacitance (Sub-linear scaling for core clustering) ---
+        // Flattened shader impact prevents massive bloat in late-game architectures
+        const coreCapacitance = Math.pow(d.sh, 0.45) * 4.5;
+        const capacitance = coreCapacitance + (d.cache * 0.6) + (d.bus * 0.15) + 15;
+
+        // --- Activity factor ---
+        const activity = 0.6; // Stabilized base activity
+
+        // --- Node scaling (efficiency) ---
+        // Normalized around 28nm, steep efficiency curve for extreme nodes
+        const nodeFactor = Math.pow(d.node / 28, 0.85);
+
+        // --- Dynamic power (core dominated) ---
+        // Retained physical V^2 scaling
+        const dynamicPower = 
+            activity * capacitance * Math.pow(d.volt, 2) * Math.pow(d.clk, 1.5) * nodeFactor * 0.9;
+
+        // --- Memory power ---
+        const memoryPower = (d.vram * 0.5) + (bandwidth * 0.12);
+
+        // --- Leakage ---
+        // Kept your quantum tunneling penalty for small nodes
+        const leakage = capacitance * (d.node <= 5 ? 0.06 : 0.025);
+
+        // --- Total ---
+        // Increased base board power, lowered multiplier to balance massive cards
+        const totalTDP = (dynamicPower + memoryPower + leakage + 25) * 1.08;
+        const totalPwr = totalTDP;
+
+        // --- 7. Thermal Mass ---
         const ambient = 30;
-        const loadRatio = totalPwr / d.cool;
+        const heatDissipationRate = d.cool || 250;
+        const loadRatio = totalPwr / Math.max(1, heatDissipationRate);
         let thermalDelta = 0;
 
         if (loadRatio <= 0.8) {
@@ -385,62 +449,95 @@ window.gpu = {
             statusColor = "#ffaa00"; // Warning Orange
         }
 
-        if (temp > 90) {
-            const thermalThrottle = 90 / temp;
+        if (temp > 80) { boostClock *= 0.9; } // Soft thermal limit
+
+        if (temp > 95) {
+            const thermalThrottle = 95 / temp;
             if (thermalThrottle < throttle) {
                 throttle = thermalThrottle;
                 statusColor = "#ff4444"; // Danger Red
             }
-            temp = 90;
+            temp = 95;
         }
 
-        // --- D. FINAL SCORE ---
-        const effectiveClock = d.clk * throttle;
-        const tflops = (d.sh * effectiveClock * 2 * d.ipc) / 1000;
+        // --- D. PIPELINE & WORKLOAD SCORING ---
+        const effectiveClock = boostClock * throttle;
+        const tflops = (d.sh * effectiveClock * 2) / 1000;
+        const pixelOps = d.rops * effectiveClock; 
+        const texOps = d.tmus * effectiveClock;  
 
-        // Calculate specialized GPU metrics
-        const ropc = d.sh / 64; // Base ROP scaling on shaders
-        const tmu = d.sh / 16;  // Base TMU scaling on shaders
+        // --- 10. RT & Tensor Scaling ---
+        const rtGenEfficiency = d.year >= 2018 ? Math.max(1, (d.year - 2017) * 0.5) * densityFactor : 0.1;
+        const tensorGenEfficiency = d.year >= 2017 ? Math.max(1, (d.year - 2016) * 1.0) * densityFactor : 0.1;
 
-        const pixelOps = ropc * effectiveClock; // GPixel/s
-        const texOps = tmu * effectiveClock;    // GTexel/s
+        const rtOps = d.rt > 0 ? d.rt * effectiveClock * rtGenEfficiency : 0; 
+        const tensorOps = d.ten > 0 ? d.ten * effectiveClock * tensorGenEfficiency : 0;
 
-        // Ray tracing based on year and generation
-        const rtBonus = d.year >= 2018 ? (d.year - 2017) * 0.5 : 0;
-        const rtOps = (d.rt || (d.sh * 0.05)) * effectiveClock * rtBonus; // GRays/s
+        // --- 1. IPC Oversimplified ---
+        let utilization = 0.95 - (d.sh / 50000);
+        utilization = Math.max(0.6, Math.min(0.95, utilization));
+        const baseArch = 1.0 + Math.max(0, d.year - 2010) * 0.05;
+        const archEff = baseArch * d.ipc * utilization;
 
-        // AI / Tensor ops
-        const aiBonus = d.year >= 2017 ? (d.year - 2016) * 1.5 : 0.1;
-        const tensorOps = (d.ten || (d.sh * 0.1)) * effectiveClock * aiBonus; // TOPS
+        // --- 2. Parallel Efficiency ---
+        let parallelEff = 1 - Math.max(0, Math.log2(Math.max(1, d.sh / 1024))) * 0.05;
+        parallelEff = Math.max(0.7, parallelEff);
 
-        // Gaming Score: TFLOPS + Fill Rates + Penalties
-        const pixelFill = d.rops * effectiveClock;
-        const texFill = d.tmus * effectiveClock;
+        // --- 15. Power Delivery Limits ---
+        let instabilityPenalty = 1.0;
+        if (d.volt > 1.1 && d.sh > 8000) {
+            instabilityPenalty = 0.9;
+        }
 
-        let score = (tflops * 100) + (pixelFill * 0.5) + (texFill * 0.2);
-        score *= memPenalty;
-        score *= vramPenalty;
+        // --- 13. Bottleneck Stacking ---
+        // Combine our new architectural synergy with driver and stability factors
+        const totalPenalty = hardwareSynergy * parallelEff * instabilityPenalty * driverEff;
 
-        score = Math.floor(score);
+        // --- 12. Workload Types ---
+        const rasterScore = Math.floor(((tflops * 100 * archEff) + (pixelOps * 0.5) + (texOps * 0.2)) * totalPenalty);
+        const rayTracingScore = Math.floor((rasterScore * 0.5) + ((rtOps * 50) * totalPenalty));
+        const aiScore = Math.floor((tflops * 20) + ((tensorOps * 80) * totalPenalty));
+        const computeScore = Math.floor((tflops * 150 * parallelEff * archEff) * totalPenalty);
+
+        const score = Math.floor(rasterScore > rayTracingScore ? rasterScore : (rasterScore * 0.8 + rayTracingScore * 0.2));
 
         // UI Updates
         const display = document.getElementById('gpu-live-stats');
         if (display) {
-            const memStatus = memPenalty < 0.9 ? `Bottleneck` : "Good";
+            // Dynamic Diagnostic System
+            let bottleneckText = "Architecture Balanced";
+            let bottleneckColor = "#00e676"; // Green
+            
+            if (hardwareSynergy < 0.95) {
+                bottleneckColor = "#ff4444"; // Red
+                // Find the worst offender to report to the player
+                const minEff = Math.min(bandwidthEfficiency, vramPenalty, pipelineEfficiency);
+                if (minEff === bandwidthEfficiency) bottleneckText = "Memory Bus/Cache Choked";
+                else if (minEff === vramPenalty) bottleneckText = "VRAM Capacity Limited";
+                else bottleneckText = "Pipeline Choked (Needs ROPs/TMUs)";
+            }
+
             const formattedTflops = window.sys ? window.sys.formatUnits(tflops, 'TFLOPS') : `${tflops.toFixed(2)} TFLOPS`;
+            const margin = d.price - estCostPerChip;
+            const marginColor = margin > 0 ? '#00e676' : '#ff1744';
 
             display.innerHTML = `
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Performance:</span> <b style="color:var(--accent)">${formattedTflops}</b></li>
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth:</span> <b>${window.sys ? window.sys.formatUnits(bandwidth, 'GB/s') : bandwidth.toFixed(0) + ' GB/s'}</b> <span style="font-size:0.7em; color:${memPenalty < 0.9 ? '#f55' : '#888'}">${memStatus}</span></li>
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Power Draw:</span> <b>${(totalPwr * throttle).toFixed(0)}W</b> <span style="font-size:0.7em">/ ${window.sys ? window.sys.formatUnits(d.tdp, 'W') : d.tdp + ' W'} TDP</span></li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth & VRAM:</span> <b>${window.sys ? window.sys.formatUnits(bandwidth, 'GB/s') : bandwidth.toFixed(0) + ' GB/s'} | ${d.vram}GB</b> <span style="font-size:0.7em; color:${bottleneckColor}">${bottleneckText}</span></li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Sys. Power Draw:</span> <b>${totalPwr.toFixed(0)}W</b> <span style="font-size:0.7em">/ ${window.sys ? window.sys.formatUnits(d.tdp, 'W') : d.tdp + ' W'} Cooler Limit</span></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Temp:</span> <b style="color:${statusColor}">${temp.toFixed(0)}°C</b></li>
-                <li style="border-top:1px solid #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.8em; color:#888;"><span>Pixel/Tex:</span> <span>${pixelOps.toFixed(1)} GPixel/s | ${texOps.toFixed(1)} GTexel/s</span></li>
-                <li style="display:flex; justify-content:space-between; font-size:0.8em; color:#888; margin-bottom:4px;"><span>RT/AI:</span> <span>${rtOps.toFixed(1)} GRays/s | ${tensorOps.toFixed(1)} TOPS</span></li>
-                <li style="display:flex; justify-content:space-between; border-top:1px solid #444; padding-top:4px;"><span>Gaming Score:</span> <b style="color:var(--accent)">${score}</b></li>
+                <li style="border-top:1px solid #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.8em; color:#888;"><span>Die Area & Yield:</span> <b>${dieArea.toFixed(0)} mm² (${(yieldRate * 100).toFixed(1)}%)</b></li>
+                <li style="display:flex; justify-content:space-between; font-size:0.8em; color:#888; margin-bottom:4px;"><span>Est. Mfg Cost:</span> <b style="color:${marginColor}">$${estCostPerChip.toFixed(2)}</b></li>
+                <li style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; border-top:1px solid #444; padding-top:4px; margin-top:4px; font-size:0.85em;">
+                    <span style="color:#aaa;">Raster: <b style="color:var(--accent)">${rasterScore}</b></span>
+                    <span style="color:#aaa;">Compute: <b style="color:var(--accent)">${computeScore}</b></span>
+                    <span style="color:#aaa;">RT: <b style="color:var(--accent)">${rayTracingScore}</b></span>
+                    <span style="color:#aaa;">AI/Tensor: <b style="color:var(--accent)">${aiScore}</b></span>
+                </li>
             `;
         }
 
-        return { score, tflops, temp, bandwidth, pixelOps, texOps, rtOps, tensorOps };
+        return { score, rasterScore, rayTracingScore, aiScore, computeScore, tflops, temp, bandwidth, pixelOps, texOps, rtOps, tensorOps, dieArea, yieldRate: (yieldRate * 100).toFixed(1), estCost: estCostPerChip.toFixed(2) };
     },
 
     scrapeData: function () {
@@ -451,6 +548,8 @@ window.gpu = {
         const modelSelect = document.getElementById('gpu-name-model');
         const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('gpu-name-model-new').value : modelSelect.value) : "Unknown";
         const version = document.getElementById('gpu-name-version') ? document.getElementById('gpu-name-version').value : "";
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         return {
             modelName: model,
@@ -459,7 +558,7 @@ window.gpu = {
             hideStorefront: document.getElementById('gpu-hide-storefront') ? document.getElementById('gpu-hide-storefront').checked : false,
             node: get('gpu-node'),
             price: get('gpu-price'),
-            year: get('gpu-year'),
+            year: currentYear,
             sh: get('gpu-shaders'),
             clk: get('gpu-clock'),
             ipc: get('gpu-ipc'),
@@ -472,7 +571,11 @@ window.gpu = {
             rt: get('gpu-rt'),
             ten: get('gpu-tensor'),
             cool: get('gpu-cool'),
-            tdp: get('gpu-tdp')
+            tdp: get('gpu-tdp'),
+            res: document.getElementById('gpu-res') ? document.getElementById('gpu-res').value : '1440p',
+            cache: get('gpu-cache'),
+            driver: get('gpu-driver'),
+            bin: get('gpu-bin')
         };
     },
 
@@ -541,6 +644,10 @@ window.gpu = {
 
             // Stats
             benchmarks: {
+                raster: results.rasterScore,
+                compute: results.computeScore,
+                rt: results.rayTracingScore,
+                ai: results.aiScore,
                 pixelOps: results.pixelOps,
                 texOps: results.texOps,
                 rtOps: results.rtOps,

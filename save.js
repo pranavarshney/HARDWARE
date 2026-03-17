@@ -8,7 +8,8 @@ window.sys = {
     // --- 1. CORE STORAGE ---
     load: function () {
         const data = localStorage.getItem(DB_KEY);
-        let parsed = data ? JSON.parse(data) : { inventory: [] };
+        let parsed = data ? JSON.parse(data) : { inventory: [], gameTime: { year: 2010, quarter: 1 } };
+        if (!parsed.gameTime) parsed.gameTime = { year: 2010, quarter: 1 };
         return parsed;
     },
 
@@ -57,6 +58,62 @@ window.sys = {
         return `${Number(val.toFixed(2))} ${unit}`;
     },
 
+    updateTimeDisplay: function () {
+        const db = this.load();
+        const display = document.getElementById('game-time-display');
+        if (display) {
+            display.textContent = `${db.gameTime.year} Q${db.gameTime.quarter}`;
+        }
+    },
+
+    nextQuarter: function () {
+        const db = this.load();
+        db.gameTime.quarter++;
+        if (db.gameTime.quarter > 4) {
+            db.gameTime.quarter = 1;
+            db.gameTime.year++;
+        }
+        this.save(db);
+        this.updateTimeDisplay();
+        if (window.showToast) window.showToast(`Advanced to ${db.gameTime.year} Q${db.gameTime.quarter}`, 'info');
+    },
+
+    prevQuarter: function () {
+        const db = this.load();
+        if (db.gameTime.year === 2010 && db.gameTime.quarter === 1) {
+            if (window.showToast) window.showToast(`Cannot go back before starting date.`, 'error');
+            return;
+        }
+
+        const targetYearStr = `${db.gameTime.year} Q${db.gameTime.quarter}`;
+        // UNDO Logic: Delete products created in this current quarter before moving back
+        const itemsToDelete = db.inventory.filter(i => i.year === targetYearStr);
+        if (itemsToDelete.length > 0) {
+            db.inventory = db.inventory.filter(i => i.year !== targetYearStr);
+            if (window.showToast) window.showToast(`Undid ${itemsToDelete.length} product(s) from ${targetYearStr}.`, 'error');
+        }
+
+        db.gameTime.quarter--;
+        if (db.gameTime.quarter < 1) {
+            db.gameTime.quarter = 4;
+            db.gameTime.year--;
+        }
+        this.save(db);
+        this.updateTimeDisplay();
+        if (window.showToast && itemsToDelete.length === 0) window.showToast(`Reverted to ${db.gameTime.year} Q${db.gameTime.quarter}`, 'info');
+        
+        // Refresh views
+        if (window.currentView === 'inventory' && window.renderInventory) window.renderInventory();
+        if (window.currentView === 'storefront' && window.renderStorefront) window.renderStorefront();
+        if (window.currentPart) {
+            let moduleName = window.currentPart;
+            if (moduleName === 'console') moduleName = 'consoleArch';
+            if (window[moduleName] && window[moduleName].refreshLineup) {
+                window[moduleName].refreshLineup();
+            }
+        }
+    },
+
     // --- 2. API ---
     saveDesign: function (type, specs) {
         const db = this.load();
@@ -79,7 +136,7 @@ window.sys = {
             specs: specs.specs, // The display strings
             raw: specs, // The raw math data
             date: new Date().toLocaleDateString(),
-            year: specs.year,
+            year: `${db.gameTime.year} Q${db.gameTime.quarter}`,
             score: scoreVal
         };
 
@@ -212,15 +269,9 @@ window.sys = {
                     <input type="text" id="edit-name" value="${item.name}">
                 </div>
                 
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                    <div class="input-group">
-                        <label>Release Year</label>
-                        <input type="number" id="edit-year" value="${item.year || item.raw.year}">
-                    </div>
-                    <div class="input-group">
-                        <label>Retail Price ($)</label>
-                        <input type="number" id="edit-price" value="${item.raw.price || 0}">
-                    </div>
+                <div class="input-group">
+                    <label>Retail Price ($)</label>
+                    <input type="number" id="edit-price" value="${item.raw.price || 0}">
                 </div>
                 
                 ${specsHtml}
@@ -241,16 +292,14 @@ window.sys = {
         if (!baseItem) return;
 
         const newName = document.getElementById('edit-name').value;
-        const newYear = parseInt(document.getElementById('edit-year').value) || 0;
         const newPrice = parseFloat(document.getElementById('edit-price').value) || 0;
 
         // Clone the item
         const newItem = JSON.parse(JSON.stringify(baseItem));
         newItem.id = Date.now();
         newItem.name = newName;
-        newItem.year = newYear;
+        // Keep existing year from base item since we don't edit it anymore
         newItem.raw.name = newName;
-        newItem.raw.year = newYear;
         newItem.raw.price = newPrice;
         
         // Apply spec changes safely
@@ -285,14 +334,12 @@ window.sys = {
         if (itemIndex === -1) return;
 
         const newName = document.getElementById('edit-name').value;
-        const newYear = parseInt(document.getElementById('edit-year').value) || 0;
         const newPrice = parseFloat(document.getElementById('edit-price').value) || 0;
 
         // Apply base changes
         db.inventory[itemIndex].name = newName;
-        db.inventory[itemIndex].year = newYear;
+        // Do not update year
         db.inventory[itemIndex].raw.name = newName;
-        db.inventory[itemIndex].raw.year = newYear;
         db.inventory[itemIndex].raw.price = newPrice;
 
         // Apply spec changes safely

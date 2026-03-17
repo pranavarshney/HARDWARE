@@ -28,7 +28,8 @@ window.cpu = {
     // --- 2. UI RENDERER ---
     render: function (container) {
         if (!container) return;
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
         const defaultFab = this.estimateFab(currentYear);
 
         container.innerHTML = `
@@ -182,11 +183,7 @@ window.cpu = {
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Manufacturing</h3>
 
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
-                            <label>Launch Year</label>
-                            <input type="number" id="cpu-year" value="${currentYear}">
-                        </div>
+                    <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
                         <div class="input-group">
                             <label>Retail Price ($)</label>
                             <input type="number" id="cpu-price" value="599">
@@ -223,11 +220,6 @@ window.cpu = {
         container.querySelectorAll('input, select').forEach(input => {
             input.addEventListener('input', () => this.updatePreview());
             input.addEventListener('change', () => this.updatePreview());
-        });
-
-        document.getElementById('cpu-year').addEventListener('input', (e) => {
-            document.getElementById('simd-container').innerHTML = this.renderSimdOptions(parseInt(e.target.value));
-            this.updatePreview();
         });
 
         this.updatePreview();
@@ -391,7 +383,6 @@ window.cpu = {
         set('npu-clock', raw.aiClock);
         set('npu-ops', raw.aiOps);
         setCheck('dedicated-ai', raw.dedicatedAI);
-        set('cpu-year', raw.year);
         set('cpu-price', raw.price);
         set('cpu-socket', raw.socket);
 
@@ -471,7 +462,6 @@ window.cpu = {
             aiOps: getVal('npu-ops'),
             dedicatedAI: document.getElementById('dedicated-ai') ? document.getElementById('dedicated-ai').checked : false,
 
-            year: getVal('cpu-year'),
             price: getVal('cpu-price', true),
             socket: document.getElementById('cpu-socket') ? document.getElementById('cpu-socket').value : "Custom",
 

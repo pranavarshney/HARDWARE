@@ -58,7 +58,8 @@ window.smartphone = {
     // --- 2. RENDER UI ---
     render: function (container) {
         if (!container) return;
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -93,7 +94,7 @@ window.smartphone = {
                                 <option value="Gaming">Gaming (Trigger+RGB)</option>
                             </select>
                         </div>
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="phone-year" value="${currentYear}">
                         </div>
@@ -346,7 +347,6 @@ window.smartphone = {
 
         set('phone-name-version', raw.versionName || "");
         setCheck('phone-hide-storefront', raw.hideStorefront);
-        set('phone-year', raw.year);
         set('phone-price', raw.price);
         
         if (raw.form) set('phone-form', raw.form);
@@ -613,12 +613,14 @@ window.smartphone = {
         const modelSelect = document.getElementById('phone-name-model');
         const model = modelSelect ? (modelSelect.value === 'NEW' ? document.getElementById('phone-name-model-new').value : modelSelect.value) : "Unknown";
         const version = document.getElementById('phone-name-version') ? document.getElementById('phone-name-version').value : "";
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
         return {
             modelName: model,
             versionName: version,
             name: (model + " " + version).trim(),
             hideStorefront: document.getElementById('phone-hide-storefront') ? document.getElementById('phone-hide-storefront').checked : false,
-            year: parseFloat(document.getElementById('phone-year').value),
+            year: currentYear,
             price: parseFloat(document.getElementById('phone-price').value),
             form: document.getElementById('phone-form') ? document.getElementById('phone-form').value : '',
             chassis: document.getElementById('phone-chassis') ? document.getElementById('phone-chassis').value : '',

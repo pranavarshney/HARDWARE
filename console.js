@@ -29,7 +29,8 @@ window.consoleArch = {
     // --- 2. RENDER UI ---
     render: function (container) {
         if (!container) return;
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -61,7 +62,7 @@ window.consoleArch = {
                                 ${this.renderOptions(this.chassis_opts)}
                             </select>
                         </div>
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="con-year" value="${currentYear}">
                         </div>
@@ -272,7 +273,6 @@ window.consoleArch = {
 
         set('con-name-version', raw.versionName || "");
         setCheck('con-hide-storefront', raw.hideStorefront);
-        set('con-year', raw.year);
         set('con-price', raw.price);
         if (raw.case) set('con-case', raw.case);
         if (raw.controller) set('con-controller', raw.controller);
@@ -426,12 +426,14 @@ window.consoleArch = {
         }
         const versionName = document.getElementById('con-name-version').value;
         const fullName = `${modelName} ${versionName}`.trim();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
         return {
             modelName: modelName,
             versionName: versionName,
             name: fullName,
             hideStorefront: document.getElementById('con-hide-storefront') ? document.getElementById('con-hide-storefront').checked : false,
-            year: parseFloat(document.getElementById('con-year').value),
+            year: currentYear,
             price: parseFloat(document.getElementById('con-price').value),
             case: document.getElementById('con-case') ? document.getElementById('con-case').value : '',
             controller: document.getElementById('con-controller') ? document.getElementById('con-controller').value : '',

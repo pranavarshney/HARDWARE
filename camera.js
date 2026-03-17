@@ -25,7 +25,8 @@ window.camera = {
         // Reset state on render so lenses don't persist across navigation
         this.lenses = [];
 
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -195,7 +196,7 @@ window.camera = {
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Pricing</h3>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="cam-year" value="${currentYear}">
                         </div>
@@ -330,7 +331,6 @@ window.camera = {
         set('cam-fps', raw.fps);
         set('cam-fmp', raw.fmp);
         set('cam-fap', raw.fap);
-        set('cam-year', raw.year);
         set('cam-price', raw.price);
 
         if (raw.lenses) {
@@ -362,6 +362,9 @@ window.camera = {
             return parseFloat(el.value) || 0;
         };
 
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
+
         return {
             name: document.getElementById('cam-name').value,
             hideStorefront: document.getElementById('cam-hide-storefront') ? document.getElementById('cam-hide-storefront').checked : false,
@@ -382,7 +385,7 @@ window.camera = {
             fps: get('cam-fps'),
             fmp: get('cam-fmp'),
             fap: get('cam-fap'),
-            year: get('cam-year'),
+            year: currentYear,
             price: get('cam-price')
         };
     },

@@ -21,7 +21,8 @@ window.ram = {
         if (!container) return;
 
         // Default year logic
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -111,7 +112,7 @@ window.ram = {
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Simulation</h3>
                     
-                    <div class="input-group">
+                    <div style="display:none;" class="input-group">
                         <label>Launch Year</label>
                         <input type="number" id="ram-year" value="${currentYear}">
                     </div>
@@ -179,7 +180,6 @@ window.ram = {
         set('ram-volts', raw.volts);
         set('ram-channels', raw.channels);
         set('ram-price', raw.price);
-        set('ram-year', raw.year);
 
         this.updatePhysics();
     },
@@ -248,6 +248,9 @@ window.ram = {
             return parseFloat(el.value) || 0;
         };
 
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
+
         return {
             name: document.getElementById('ram-name').value,
             hideStorefront: document.getElementById('ram-hide-storefront') ? document.getElementById('ram-hide-storefront').checked : false,
@@ -258,7 +261,7 @@ window.ram = {
             volts: get('ram-volts'),
             channels: get('ram-channels'),
             price: get('ram-price'),
-            year: get('ram-year')
+            year: currentYear
         };
     },
 

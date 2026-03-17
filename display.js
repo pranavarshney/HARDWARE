@@ -32,7 +32,8 @@ window.display = {
     render: function (container) {
         if (!container) return;
 
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -161,7 +162,7 @@ window.display = {
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Simulation</h3>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
+                        <div style="display:none;" class="input-group">
                             <label>Launch Year</label>
                             <input type="number" id="disp-year" value="${currentYear}">
                         </div>
@@ -246,8 +247,6 @@ window.display = {
         set('disp-nits', raw.nits);
         set('disp-contrast', raw.contrast);
         set('disp-bits', raw.bits);
-        set('disp-price', raw.price);
-        set('disp-year', raw.year);
         set('disp-gamut', raw.gamut);
         set('disp-port', raw.port);
         set('disp-sync', raw.sync);
@@ -262,6 +261,9 @@ window.display = {
         const getNum = (id) => { const el = document.getElementById(id); return parseFloat(el.value) || 0; };
         const getStr = (id) => { const el = document.getElementById(id); return el.value; };
 
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
+
         return {
             name: getStr('disp-name'),
             hideStorefront: document.getElementById('disp-hide-storefront') ? document.getElementById('disp-hide-storefront').checked : false,
@@ -275,7 +277,7 @@ window.display = {
             contrast: getNum('disp-contrast'),
             bits: getNum('disp-bits'),
             price: getNum('disp-price'),
-            year: getNum('disp-year'),
+            year: currentYear,
             gamut: getStr('disp-gamut'),
             port: getStr('disp-port'),
             sync: getStr('disp-sync'),

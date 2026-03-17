@@ -31,7 +31,8 @@ window.storage = {
         if (!container) return;
 
         // Default year
-        const currentYear = new Date().getFullYear();
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
 
         container.innerHTML = `
             <div class="architect-container">
@@ -142,10 +143,10 @@ window.storage = {
                 <div class="panel" style="border-color: var(--accent-success);">
                     <h3>Release & Pricing</h3>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        <div class="input-group">
-                            <label>Launch Year</label>
-                            <input type="number" id="sto-year" value="${currentYear}">
-                        </div>
+                    <div style="display:none;" class="input-group">
+                        <label>Launch Year</label>
+                        <input type="number" id="sto-year" value="${currentYear}">
+                    </div>
                         <div class="input-group">
                             <label>Price ($)</label>
                             <input type="number" id="sto-price" value="89">
@@ -234,7 +235,6 @@ window.storage = {
         set('sto-speed', raw.speed);
         set('sto-cache', raw.cache);
         set('sto-price', raw.price);
-        set('sto-year', raw.year);
 
         if (raw.type === 'HDD') set('sto-rpm', raw.rpm);
         if (raw.type === 'SSD') set('sto-cell', raw.cell);
@@ -312,6 +312,9 @@ window.storage = {
             return parseFloat(el.value) || 0;
         };
 
+        const db = window.sys ? window.sys.load() : null;
+        const currentYear = (db && db.gameTime) ? db.gameTime.year : 2010;
+
         return {
             name: document.getElementById('sto-name').value,
             hideStorefront: document.getElementById('sto-hide-storefront') ? document.getElementById('sto-hide-storefront').checked : false,
@@ -321,7 +324,7 @@ window.storage = {
             speed: get('sto-speed'),
             cache: get('sto-cache'),
             price: get('sto-price'),
-            year: get('sto-year'),
+            year: currentYear,
             rpm: get('sto-rpm'),
             cell: document.getElementById('sto-cell') ? document.getElementById('sto-cell').value : 'TLC'
         };
