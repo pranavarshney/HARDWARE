@@ -306,23 +306,24 @@ window.mobo = {
         const d = this.scrapeData();
 
         // 1. VRM POWER CAPACITY CALCULATION
-        let wattsPerPhase = 25; // Base
-        if (d.price > 200) wattsPerPhase = 45; // DrMOS
-        if (d.price > 500) wattsPerPhase = 70; // SPS
-        if (d.price < 100) wattsPerPhase = 15; // D-PAK
-
-        let rawPowerCap = d.phases * wattsPerPhase;
+        let powerPerPhase = 60;
+        let electricalPower = d.phases * powerPerPhase;
 
         // Cooling Multiplier
-        const coolingMult = {
+        const coolingFactor = {
             'None': 0.6,
             'Passive': 1.0,
             'Heatpipe': 1.3,
             'Active Fan': 1.5,
             'Waterblock': 2.0
-        };
+        }[d.cool] || 1.0;
 
-        const maxTDP = Math.floor(rawPowerCap * (coolingMult[d.cool] || 1.0));
+        // temperature simulation
+        let heat = electricalPower * 0.1; // 10% loss
+        let vrmTemp = 30 + heat / coolingFactor;
+
+        // final usable power
+        let maxTDP = Math.floor(vrmTemp > 100 ? electricalPower * 0.7 : electricalPower);
 
         // 2. SIGNAL INTEGRITY
         let maxRamSpeed = 3200; // Base DDR4
@@ -332,10 +333,8 @@ window.mobo = {
         const slots = { 'ITX': 1, 'mATX': 2, 'ATX': 3, 'E-ATX': 4 }[d.form] || 3;
         const m2Slots = Math.max(1, Math.floor(d.layers / 2));
 
-        // 4. VRM TEMP ESTIMATE
         const simLoad = 200; // Standard high-end CPU load
         const loadRatio = simLoad / maxTDP;
-        let vrmTemp = 40 + (loadRatio * 60);
 
         let status = "Stable";
         let color = "#00ff88"; // Success Green

@@ -432,7 +432,7 @@ window.laptop = {
         let cpuScore = cpu ? (cpu.raw.benchmarks?.multiScore || 0) : 0;
         let gpuScore = gpu ? (gpu.raw.benchmarks?.score || 0) : 0;
 
-        const effectivePerf = (cpuScore + gpuScore) * throttle;
+        let effectivePerf = (cpuScore + gpuScore) * throttle;
 
         // --- E. COST & PROFIT ---
         const moboCost = mobo ? (mobo.raw.price || 0) : 0;
@@ -471,6 +471,8 @@ window.laptop = {
         if (usedSlots > moboSlots) {
             errors.push(`Slot Limit Exceeded: Laptop board has ${moboSlots} slots, but ${usedSlots} are occupied (1 GPU + ${ramQty} RAM + ${stoQty} SSDs).`);
         }
+
+
 
         return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: { cpu, mobo, gpu, ram, sto, disp }, batteryLife };
     },

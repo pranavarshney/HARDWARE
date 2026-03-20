@@ -128,6 +128,37 @@ window.sys = {
         if (specs.specs && specs.specs.Score) scoreVal = parseFloat(specs.specs.Score) || 0; // if "1200"
         if (scoreVal === 0 && typeof specs.specs.Score === 'string') scoreVal = parseFloat(specs.specs.Score.replace(/[^0-9.]/g, '')) || 0; // if "1200 pts"
 
+        // Helper to safely format numbers for display
+        const formatVal = (key, val) => {
+            if (typeof val !== 'number') return val;
+            if (key.toLowerCase().includes('score')) return Math.floor(val).toLocaleString();
+            if (key.toLowerCase().includes('area')) return `${val.toFixed(1)} mm²`;
+            if (key.toLowerCase().includes('yield')) return `${val.toFixed(1)}%`;
+            if (key.toLowerCase().includes('cost')) return `$${val.toFixed(2)}`;
+            if (val % 1 === 0) return val.toLocaleString();
+            return val.toFixed(2);
+        };
+
+        // Inject all benchmarks into specs if they exist
+        if (specs.benchmarks) {
+            for (let [bKey, bVal] of Object.entries(specs.benchmarks)) {
+                let displayKey = bKey.charAt(0).toUpperCase() + bKey.slice(1).replace(/([A-Z])/g, ' $1').trim() + " Score";
+                if (!specs.specs[displayKey] && bKey !== 'score') {
+                    specs.specs[displayKey] = formatVal(bKey, bVal);
+                }
+            }
+        }
+
+        // Inject all raw data parameters (excluding objects/arrays and duplicates) into specs
+        const excludeKeys = ['name', 'price', 'year', 'hideStorefront', 'modelName', 'versionName'];
+        for (let [rKey, rVal] of Object.entries(specs)) {
+            if (typeof rVal === 'object' || excludeKeys.includes(rKey)) continue;
+            let displayKey = rKey.charAt(0).toUpperCase() + rKey.slice(1).replace(/([A-Z])/g, ' $1').trim();
+            if (!specs.specs[displayKey] && displayKey !== 'Score') {
+                 specs.specs[displayKey + ' (Raw)'] = formatVal(rKey, rVal);
+            }
+        }
+
         const newItem = {
             id: Date.now(),
             type: type,
@@ -302,16 +333,60 @@ window.sys = {
         newItem.raw.name = newName;
         newItem.raw.price = newPrice;
         
-        // Apply spec changes safely
-        const specsContainer = document.getElementById('edit-modal-overlay');
-        const specInputs = specsContainer.querySelectorAll('input[id^="edit-spec-"]');
+        // Determine if Score was edited and compute multiplier ratio
+        let oldScoreStr = String(baseItem.specs['Score'] || "0");
+        let newScoreStr = "";
+        let multiplier = 1.0;
+        
+        specInputs.forEach(input => {
+            const key = input.getAttribute('data-speckey');
+            if (key === 'Score') newScoreStr = input.value;
+        });
+
+        if (newScoreStr && newScoreStr !== oldScoreStr) {
+            let oldS = parseFloat(oldScoreStr.replace(/[^0-9.]/g, '')) || 1;
+            let newS = parseFloat(newScoreStr.replace(/[^0-9.]/g, '')) || oldS;
+            if (oldS > 0) multiplier = newS / oldS;
+        }
+
+        // Apply spec changes safely and recalculate scaling
         specInputs.forEach(input => {
             const key = input.getAttribute('data-speckey');
             if (key && newItem.specs[key] !== undefined) {
-                newItem.specs[key] = input.value;
+                // If it's a score or benchmark field, scale it proportionally if multiplier != 1
+                if (multiplier !== 1.0 && (key.toLowerCase().includes('score') || key.toLowerCase().includes('flops') || key.toLowerCase().includes('ops'))) {
+                    if (key !== 'Score') { // Main score is taken literally from user input
+                        let valStr = String(newItem.specs[key]);
+                        let numMatch = valStr.match(/-?\d+(\.\d+)?/);
+                        if (numMatch) {
+                            let oldNum = parseFloat(numMatch[0]);
+                            let newNum = (oldNum * multiplier);
+                            // Avoid decimals for large flat scores
+                            if (newNum > 100) newNum = Math.floor(newNum);
+                            else newNum = parseFloat(newNum.toFixed(2));
+                            newItem.specs[key] = valStr.replace(numMatch[0], newNum);
+                        }
+                    } else {
+                        newItem.specs[key] = input.value;
+                    }
+                } else {
+                    newItem.specs[key] = input.value;
+                }
             }
         });
-
+        
+        // Also update the hidden numeric score field if Score was modified
+        if (multiplier !== 1.0) {
+            newItem.score = parseFloat(newItem.specs['Score'].replace(/[^0-9.]/g, '')) || newItem.score;
+            if (newItem.raw && newItem.raw.benchmarks) {
+                for (let bKey in newItem.raw.benchmarks) {
+                    if (typeof newItem.raw.benchmarks[bKey] === 'number') {
+                        newItem.raw.benchmarks[bKey] *= multiplier;
+                    }
+                }
+            }
+        }
+        
         db.inventory.push(newItem);
         this.save(db);
         document.getElementById('edit-modal-overlay').remove();
@@ -342,16 +417,62 @@ window.sys = {
         db.inventory[itemIndex].raw.name = newName;
         db.inventory[itemIndex].raw.price = newPrice;
 
-        // Apply spec changes safely
+        // Determine if Score was edited and compute multiplier ratio
+        let oldScoreStr = String(db.inventory[itemIndex].specs['Score'] || "0");
+        let newScoreStr = "";
+        let multiplier = 1.0;
+        
         const specsContainer = document.getElementById('edit-modal-overlay');
         const specInputs = specsContainer.querySelectorAll('input[id^="edit-spec-"]');
+        
+        specInputs.forEach(input => {
+            const key = input.getAttribute('data-speckey');
+            if (key === 'Score') newScoreStr = input.value;
+        });
 
+        if (newScoreStr && newScoreStr !== oldScoreStr) {
+            let oldS = parseFloat(oldScoreStr.replace(/[^0-9.]/g, '')) || 1;
+            let newS = parseFloat(newScoreStr.replace(/[^0-9.]/g, '')) || oldS;
+            if (oldS > 0) multiplier = newS / oldS;
+        }
+
+        // Apply spec changes safely and recalculate scaling
         specInputs.forEach(input => {
             const key = input.getAttribute('data-speckey');
             if (key && db.inventory[itemIndex].specs[key] !== undefined) {
-                db.inventory[itemIndex].specs[key] = input.value;
+                // If it's a score or benchmark field, scale it proportionally if multiplier != 1
+                if (multiplier !== 1.0 && (key.toLowerCase().includes('score') || key.toLowerCase().includes('flops') || key.toLowerCase().includes('ops'))) {
+                    if (key !== 'Score') { // Main score is taken literally from user input
+                        let valStr = String(db.inventory[itemIndex].specs[key]);
+                        let numMatch = valStr.match(/-?\d+(\.\d+)?/);
+                        if (numMatch) {
+                            let oldNum = parseFloat(numMatch[0]);
+                            let newNum = (oldNum * multiplier);
+                            // Avoid decimals for large flat scores
+                            if (newNum > 100) newNum = Math.floor(newNum);
+                            else newNum = parseFloat(newNum.toFixed(2));
+                            db.inventory[itemIndex].specs[key] = valStr.replace(numMatch[0], newNum);
+                        }
+                    } else {
+                        db.inventory[itemIndex].specs[key] = input.value;
+                    }
+                } else {
+                    db.inventory[itemIndex].specs[key] = input.value;
+                }
             }
         });
+
+        // Also update the hidden numeric score field if Score was modified
+        if (multiplier !== 1.0) {
+            db.inventory[itemIndex].score = parseFloat(db.inventory[itemIndex].specs['Score'].replace(/[^0-9.]/g, '')) || db.inventory[itemIndex].score;
+            if (db.inventory[itemIndex].raw && db.inventory[itemIndex].raw.benchmarks) {
+                for (let bKey in db.inventory[itemIndex].raw.benchmarks) {
+                    if (typeof db.inventory[itemIndex].raw.benchmarks[bKey] === 'number') {
+                        db.inventory[itemIndex].raw.benchmarks[bKey] *= multiplier;
+                    }
+                }
+            }
+        }
 
         this.save(db);
         document.getElementById('edit-modal-overlay').remove();

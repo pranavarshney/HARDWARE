@@ -327,7 +327,7 @@ window.display = {
         // (W * H * Hz * Bits * 3 channels) * 1.12 Overhead / 1 billion
         const rawBandwidth = ((d.w * d.h * d.hz * d.bits * 3) * 1.12) / 1000000000;
         const portLimit = this.portCapacities[d.port] || 18.0;
-        const isBottlenecked = rawBandwidth > portLimit;
+        const isPortLimited = rawBandwidth > portLimit;
 
         // 3. MOTION CLARITY
         const persistence = 1000 / d.hz;
@@ -378,7 +378,7 @@ window.display = {
         let syncBonus = d.sync !== 'None' ? 200 : 0;
         let gamingScore = (d.hz * 10) + (2000 / Math.max(totalBlur, 0.1)) + syncBonus;
         if (d.curve !== 'Flat') gamingScore += 100; // Gamers like curves
-        if (isBottlenecked) gamingScore *= 0.5; // Huge penalty if port limits refresh rate
+        if (isPortLimited) gamingScore *= 0.5; // Huge penalty if port limits refresh rate
 
         // B. Creative Score
         let creativeScore = (ppi * 5) + (hdrScore * 5) + (Math.log10(Math.max(1, d.contrast)) * 100);
@@ -397,7 +397,7 @@ window.display = {
         const display = document.getElementById('disp-live-stats');
         if (display) {
             let bwHtml = `<b>${rawBandwidth.toFixed(1)} Gbps</b> / <span style="color:#aaa;">${portLimit} Gbps (${d.port})</span>`;
-            if (isBottlenecked) bwHtml = `<b style="color:#ff1744;">${rawBandwidth.toFixed(1)} Gbps (PORT BOTTLENECK!)</b>`;
+            if (isPortLimited) bwHtml = `<b style="color:#ff1744;">${rawBandwidth.toFixed(1)} Gbps (PORT LIMIT EXCEEDED)</b>`;
 
             display.innerHTML = `
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Aspect / PPI:</span> <b>${aspect} | ${Math.floor(ppi)} PPI</b></li>
@@ -415,7 +415,7 @@ window.display = {
             `;
         }
 
-        return { compositeScore, gamingScore, creativeScore, officeScore, hdrBadge, isBottlenecked };
+        return { compositeScore, gamingScore, creativeScore, officeScore, hdrBadge, isPortLimited };
     },
 
     // --- 4. DATABASE & SAVE LOGIC ---
@@ -471,7 +471,7 @@ window.display = {
         const data = this.scrapeData();
         const results = this.updatePhysics();
 
-        if (results.isBottlenecked && !confirm("WARNING: The selected port cannot support this bandwidth! The display will be severely bottlenecked. Manufacture anyway?")) {
+        if (results.isPortLimited && !confirm("WARNING: The selected port cannot support this bandwidth! The display refresh rate will be limited. Manufacture anyway?")) {
             return;
         }
 

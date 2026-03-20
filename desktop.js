@@ -1,5 +1,5 @@
 /* HARDWARE TYCOON: DESKTOP ARCHITECT
- * PHYSICS ENGINE V1.0 (System Integration, Compatibility & Bottlenecks)
+ * PHYSICS ENGINE V1.0 (System Integration & Compatibility)
  */
 
 window.desktop = {
@@ -393,12 +393,16 @@ window.desktop = {
         }
 
         // 3. POWER & THERMALS
-        // Summing TDPs (fallback to 0 if part missing)
         const cpuTDP = cpu ? (cpu.raw.tdp || 65) : 0;
-        const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0; // GPU might not have tdp in raw if old version, assume safe default
-        const sysOverhead = 50 + (ramQty * 3) + (stoQty * 5); // Fans, drives, mobo, ram
+        const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0;
 
-        const totalWatts = cpuTDP + gpuTDP + sysOverhead;
+        // --- POWER ---
+        const base = 30;
+        const ramPower = ramQty * 2;
+        const storagePower = stoQty * 4;
+        const moboPower = 15;
+        const systemOverhead = base + ramPower + storagePower + moboPower;
+        const totalWatts = cpuTDP + gpuTDP + systemOverhead;
         const psuWatts = psu ? psu.watts : 0;
 
         let powerStatus = "Good";
@@ -413,39 +417,26 @@ window.desktop = {
             powerColor = "#ffaa00";
         }
 
-        // Cooling Check
-        const totalHeat = cpuTDP; // GPU usually cools itself, case airflow helps both
-        // Cooler TDP is for CPU.
-        const coolingCap = (cooler ? cooler.tdp : 0) + (chassis ? chassis.airflow * 10 : 0);
+        // --- THERMALS ---
+        const caseCooling = chassis ? chassis.airflow * 15 : 0;
+        const totalCooling = (cooler ? cooler.tdp : 0) + caseCooling;
+        const totalHeat = cpuTDP + (gpuTDP * 0.8);
 
+        let thermalPenalty = 0;
         let thermalStatus = "Cool";
-        if (cpuTDP > coolingCap) {
-            thermalStatus = "CPU Throttling";
-            errors.push("Thermal Throttle: CPU Cooler insufficient");
+        if (totalHeat > totalCooling) {
+            thermalPenalty = Math.min(30, (totalHeat - totalCooling) * 0.2);
+            thermalStatus = `Throttling (-${thermalPenalty.toFixed(1)}%)`;
+            if (thermalPenalty >= 25) {
+                errors.push(`Thermal Throttle: Heat ${Math.floor(totalHeat)}W exceeds cooling ${Math.floor(totalCooling)}W`);
+            }
         }
 
-        // 4. PERFORMANCE & BOTTLENECK
+        // --- PERFORMANCE ---
         let cpuScore = cpu ? (cpu.raw.benchmarks?.multiScore || 0) : 0;
         let gpuScore = gpu ? (gpu.raw.benchmarks?.score || 0) : 0;
 
-        // Simple Bottleneck Logic
-        // If GPU score is huge but CPU score is tiny, throttle GPU.
-        let bottleneck = 0;
-        let effectivePerf = 0;
-
-        if (gpuScore > 0 && cpuScore > 0) {
-            // Ratio. A balanced gaming PC might have GPU score ~ 1.5x CPU score (arbitrary game scale)
-            // If GPU is 5x CPU, CPU is bottleneck.
-            const ratio = gpuScore / cpuScore;
-
-            if (ratio > 3.0) {
-                bottleneck = (ratio - 3.0) * 10; // % penalty
-                if (bottleneck > 50) bottleneck = 50;
-                effectivePerf = (cpuScore * 3) + (gpuScore * (1 - (bottleneck / 100)));
-            } else {
-                effectivePerf = cpuScore + gpuScore;
-            }
-        }
+        let effectivePerf = (cpuScore + gpuScore) * (1 - thermalPenalty / 100);
 
         // 5. COST ANALYSIS
         const partsCost = (cpu?.raw.price || 0) + (gpu?.raw.price || 0) + ((ram?.raw.price || 0) * ramQty) + ((sto?.raw.price || 0) * stoQty) + (mobo?.raw.price || 0);
@@ -462,8 +453,7 @@ window.desktop = {
             } else {
                 display.innerHTML = `
                     <li style="display:flex; justify-content:space-between;"><span>Total Power:</span> <b>${totalWatts}W / ${psuWatts}W</b></li>
-                    <li style="display:flex; justify-content:space-between;"><span>Thermal Headroom:</span> <b>${(coolingCap - cpuTDP)}W</b></li>
-                    <li style="display:flex; justify-content:space-between;"><span>Bottleneck:</span> <b style="color:${bottleneck > 0 ? '#ffaa00' : '#00ff88'}">${bottleneck.toFixed(1)}%</b></li>
+                    <li style="display:flex; justify-content:space-between;"><span>Thermal Headroom:</span> <b style="color:${(totalCooling - totalHeat) < 0 ? '#ff4444' : '#00ff88'}">${Math.floor(totalCooling - totalHeat)}W</b></li>
                     <li style="display:flex; justify-content:space-between;"><span>Performance:</span> <b style="color:var(--accent)">${Math.floor(effectivePerf)} pts</b></li>
                     <li style="border-top:1px solid #444; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;">
                         <span>Mfg Cost:</span> <span style="color:#aaa">$${totalCost}</span>
@@ -474,6 +464,8 @@ window.desktop = {
                 `;
             }
         }
+
+
 
         return { valid: errors.length === 0, totalCost, effectivePerf, errors, parts: { cpu, mobo, ram, gpu, sto, chassis, psu, cooler } };
     },

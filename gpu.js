@@ -1,5 +1,5 @@
 /* HARDWARE TYCOON: GPU ARCHITECT
- * PHYSICS ENGINE V3.0 (Advanced Bottlenecks & Thermal Curves)
+ * PHYSICS ENGINE V3.0 (Advanced Compute & Thermal Curves)
  * Optimized for Flat Structure
  */
 
@@ -186,7 +186,7 @@ window.gpu = {
         this.populateModelList();
     },
 
-    populateModelList: function() {
+    populateModelList: function () {
         const select = document.getElementById('gpu-name-model');
         const newModelInput = document.getElementById('gpu-name-model-new');
         if (!select || !window.sys) return;
@@ -195,13 +195,13 @@ window.gpu = {
         db.inventory.filter(i => i.type === 'GPU').forEach(i => {
             if (i.raw && i.raw.modelName) models.add(i.raw.modelName);
         });
-        
+
         let html = `<option value="NEW">+ Create New Model</option>`;
         Array.from(models).forEach(m => {
             html += `<option value="${m}">${m}</option>`;
         });
         select.innerHTML = html;
-        
+
         // Auto-select "NEW" if no models exist
         if (models.size === 0) {
             select.value = "NEW";
@@ -213,13 +213,13 @@ window.gpu = {
         }
     },
 
-    onModelChange: function() {
+    onModelChange: function () {
         const modelSelect = document.getElementById('gpu-name-model');
         const newModelInput = document.getElementById('gpu-name-model-new');
         if (!modelSelect || !window.sys) return;
-        
+
         const modelName = modelSelect.value;
-        
+
         if (modelName === "NEW") {
             newModelInput.style.display = 'block';
             newModelInput.focus();
@@ -229,12 +229,12 @@ window.gpu = {
         } else {
             newModelInput.style.display = 'none';
         }
-        
+
         const db = window.sys.load();
-        
+
         const matches = db.inventory.filter(i => i.type === 'GPU' && i.raw && i.raw.modelName === modelName);
         if (matches.length > 0) {
-            matches.sort((a,b) => b.id - a.id);
+            matches.sort((a, b) => b.id - a.id);
             const latest = matches[0];
             this.loadBase(latest.raw);
             // The loadBase function will set the model and version names
@@ -276,7 +276,7 @@ window.gpu = {
 
         const modelSelect = document.getElementById('gpu-name-model');
         const newModelInput = document.getElementById('gpu-name-model-new');
-        
+
         if (raw.modelName) {
             let exists = false;
             for (let i = 0; i < modelSelect.options.length; i++) {
@@ -285,7 +285,7 @@ window.gpu = {
                     break;
                 }
             }
-            
+
             if (exists) {
                 modelSelect.value = raw.modelName;
                 newModelInput.style.display = 'none';
@@ -340,34 +340,31 @@ window.gpu = {
         // --- 8. Frequency Scaling Curve ---
         let boostClock = d.clk * (1 + (d.volt - 1.0) * 0.5) * binQuality;
 
-        // --- A. HARDWARE SYNERGY & BOTTLENECKS (Physics & Ratio Driven) ---
-        
+        // --- A. HARDWARE SYNERGY (Physics & Ratio Driven) ---
+
         // 1. Raw Compute Baseline (TFLOPS)
         const rawCompute = (d.sh * boostClock * 2 * (d.ipc || 1.0)) / 1000;
         const safeCompute = rawCompute > 0 ? rawCompute : 0.0001;
 
         // 2. Effective Bandwidth (Bus + Cache)
-        const rawBandwidth = (d.bus * d.mclk) / 8000;
+        const rawBandwidth = (d.bus / 8) * (d.mclk / 1000) * 2;
         const cacheMB = d.cache || 0;
         // Cache massively reduces reliance on raw memory bus (e.g., Infinity Cache effect)
-        const cacheMultiplier = 1 + (cacheMB / 32); 
+        const cacheMultiplier = 1 + (cacheMB / 32);
         const effectiveBandwidth = rawBandwidth * cacheMultiplier;
 
-        // 3. Bandwidth Bottleneck (Does the memory feed the cores fast enough?)
-        // Real-world physics: ~15 GB/s is needed to comfortably feed 1 TFLOP of compute.
+        // 3. Bandwidth Efficiency
         const requiredBandwidth = safeCompute * 15;
         const bandwidthEfficiency = Math.min(1.0, effectiveBandwidth / requiredBandwidth);
 
-        // 4. VRAM Capacity Bottleneck (Driven by Compute, not the Year!)
-        // A high-TFLOP card processes heavier textures and larger framebuffers.
-        // Roughly 0.55GB of VRAM is needed per TFLOP for balanced rendering.
-        const requiredVram = Math.max(1.0, safeCompute * 0.55);
+        // 4. VRAM Capacity Efficiency
+        const requiredVram = Math.max(1.0, safeCompute * 0.4);
         let vramPenalty = 1.0;
         if (d.vram < requiredVram) {
             vramPenalty = Math.max(0.4, d.vram / requiredVram); // Punish severe choking
         }
 
-        // 5. Pipeline Bottleneck (ROPs & TMUs vs Cores)
+        // 5. Pipeline Efficiency (ROPs & TMUs vs Cores)
         // Standard architecture ratios: ~1 ROP per 64 shaders, ~1 TMU per 16 shaders.
         const requiredRops = d.sh / 64;
         const requiredTmus = d.sh / 16;
@@ -377,14 +374,14 @@ window.gpu = {
 
         // 6. Overall Hardware Synergy
         const hardwareSynergy = bandwidthEfficiency * vramPenalty * pipelineEfficiency;
-        
+
         // Ensure bandwidth variable is still exported for the UI to use later
         const bandwidth = rawBandwidth;
 
         // --- C. POWER, THERMALS & SILICON MODEL ---
         // --- 9. Node Scaling Split ---
-        const densityFactor = Math.sqrt(14 / Math.max(d.node, 1)); 
-        const efficiencyFactor = 14 / Math.max(d.node, 1);         
+        const densityFactor = Math.sqrt(14 / Math.max(d.node, 1));
+        const efficiencyFactor = 14 / Math.max(d.node, 1);
         const costFactor = Math.pow(14 / Math.max(d.node, 1), 1.5);
 
         const baseArea = (d.sh * 0.02) + (d.vram * 2) + (d.bus * 0.1) + (d.rt * 0.5) + (d.ten * 0.1) + (cacheMB * 1.5) + 20;
@@ -410,7 +407,7 @@ window.gpu = {
 
         // --- Dynamic power (core dominated) ---
         // Retained physical V^2 scaling
-        const dynamicPower = 
+        const dynamicPower =
             activity * capacitance * Math.pow(d.volt, 2) * Math.pow(d.clk, 1.5) * nodeFactor * 0.9;
 
         // --- Memory power ---
@@ -463,14 +460,14 @@ window.gpu = {
         // --- D. PIPELINE & WORKLOAD SCORING ---
         const effectiveClock = boostClock * throttle;
         const tflops = (d.sh * effectiveClock * 2) / 1000;
-        const pixelOps = d.rops * effectiveClock; 
-        const texOps = d.tmus * effectiveClock;  
+        const pixelOps = d.rops * effectiveClock;
+        const texOps = d.tmus * effectiveClock;
 
         // --- 10. RT & Tensor Scaling ---
         const rtGenEfficiency = d.year >= 2018 ? Math.max(1, (d.year - 2017) * 0.5) * densityFactor : 0.1;
         const tensorGenEfficiency = d.year >= 2017 ? Math.max(1, (d.year - 2016) * 1.0) * densityFactor : 0.1;
 
-        const rtOps = d.rt > 0 ? d.rt * effectiveClock * rtGenEfficiency : 0; 
+        const rtOps = d.rt > 0 ? d.rt * effectiveClock * rtGenEfficiency : 0;
         const tensorOps = d.ten > 0 ? d.ten * effectiveClock * tensorGenEfficiency : 0;
 
         // --- 1. IPC Oversimplified ---
@@ -489,7 +486,7 @@ window.gpu = {
             instabilityPenalty = 0.9;
         }
 
-        // --- 13. Bottleneck Stacking ---
+        // --- 13. Synergy Stacking ---
         // Combine our new architectural synergy with driver and stability factors
         const totalPenalty = hardwareSynergy * parallelEff * instabilityPenalty * driverEff;
 
@@ -504,26 +501,13 @@ window.gpu = {
         // UI Updates
         const display = document.getElementById('gpu-live-stats');
         if (display) {
-            // Dynamic Diagnostic System
-            let bottleneckText = "Architecture Balanced";
-            let bottleneckColor = "#00e676"; // Green
-            
-            if (hardwareSynergy < 0.95) {
-                bottleneckColor = "#ff4444"; // Red
-                // Find the worst offender to report to the player
-                const minEff = Math.min(bandwidthEfficiency, vramPenalty, pipelineEfficiency);
-                if (minEff === bandwidthEfficiency) bottleneckText = "Memory Bus/Cache Choked";
-                else if (minEff === vramPenalty) bottleneckText = "VRAM Capacity Limited";
-                else bottleneckText = "Pipeline Choked (Needs ROPs/TMUs)";
-            }
-
             const formattedTflops = window.sys ? window.sys.formatUnits(tflops, 'TFLOPS') : `${tflops.toFixed(2)} TFLOPS`;
             const margin = d.price - estCostPerChip;
             const marginColor = margin > 0 ? '#00e676' : '#ff1744';
 
             display.innerHTML = `
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Performance:</span> <b style="color:var(--accent)">${formattedTflops}</b></li>
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth & VRAM:</span> <b>${window.sys ? window.sys.formatUnits(bandwidth, 'GB/s') : bandwidth.toFixed(0) + ' GB/s'} | ${d.vram}GB</b> <span style="font-size:0.7em; color:${bottleneckColor}">${bottleneckText}</span></li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Bandwidth & VRAM:</span> <b>${window.sys ? window.sys.formatUnits(bandwidth, 'GB/s') : bandwidth.toFixed(0) + ' GB/s'} | ${d.vram}GB</b></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Sys. Power Draw:</span> <b>${totalPwr.toFixed(0)}W</b> <span style="font-size:0.7em">/ ${window.sys ? window.sys.formatUnits(d.tdp, 'W') : d.tdp + ' W'} Cooler Limit</span></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Temp:</span> <b style="color:${statusColor}">${temp.toFixed(0)}°C</b></li>
                 <li style="border-top:1px solid #444; margin-top:4px; padding-top:4px; display:flex; justify-content:space-between; font-size:0.8em; color:#888;"><span>Die Area & Yield:</span> <b>${dieArea.toFixed(0)} mm² (${(yieldRate * 100).toFixed(1)}%)</b></li>
@@ -607,10 +591,10 @@ window.gpu = {
                         style="flex:1; background:rgba(0, 230, 118, 0.1); color:var(--accent-success); border:1px solid var(--accent-success); font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         CLONE
                     </button>
-                    ${gpu.raw && gpu.raw.hideStorefront ? 
-                        `<button onclick="window.sys.toggleHide(${gpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` : 
-                        `<button onclick="window.sys.toggleHide(${gpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
-                    }
+                    ${gpu.raw && gpu.raw.hideStorefront ?
+                    `<button onclick="window.sys.toggleHide(${gpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">UNHIDE</button>` :
+                    `<button onclick="window.sys.toggleHide(${gpu.id})" style="flex:1; background:rgba(255, 255, 255, 0.1); color:#aaa; border:1px solid #444; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">HIDE</button>`
+                }
                     <button onclick="window.sys.discontinue(${gpu.id})" 
                         style="flex:1; background:transparent; color:#ff4444; border:1px solid #522; font-size:0.7rem; padding:4px; cursor:pointer; border-radius:3px;">
                         DISCON.

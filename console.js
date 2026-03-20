@@ -356,7 +356,7 @@ window.consoleArch = {
         const psuWatts = parseFloat(document.getElementById('con-psu').value) || 0;
 
         // --- A. SoC POWER & HEAT ---
-        // Consoles optimize power. We assume 80% of desktop TDP for the SoC integration.
+        // Consoles optimize power. We assume 85% of desktop TDP for the SoC integration.
         const cpuTDP = cpu ? (cpu.raw.tdp || 65) : 0;
         const gpuTDP = gpu ? (gpu.raw.tdp || 150) : 0;
 
@@ -376,14 +376,21 @@ window.consoleArch = {
 
         if (totalWatts > psuWatts) errors.push(`PSU Weak: Needs ${Math.floor(totalWatts)}W, has ${psuWatts}W`);
 
-        if (socTDP > cooler.tdp) errors.push(`Overheating: SoC is ${Math.floor(socTDP)}W, Cooler is ${cooler.tdp}W`);
+        // Soft thermal penalty instead of hard error only
+        let thermalPenalty = 0;
+        if (socTDP > cooler.tdp) {
+            thermalPenalty = Math.min(30, (socTDP - cooler.tdp) * 0.2);
+            if (thermalPenalty >= 25) {
+                errors.push(`Overheating: SoC is ${Math.floor(socTDP)}W, Cooler is ${cooler.tdp}W`);
+            }
+        }
 
         // --- B. PERFORMANCE SCORE ---
         let cpuScore = cpu ? (cpu.raw.benchmarks?.multiScore || 0) : 0;
         let gpuScore = gpu ? (gpu.raw.benchmarks?.score || 0) : 0;
 
-        // Console "Optimization Magic" (Consoles perform better than specs suggest)
-        const consolePerf = (cpuScore * 0.4) + (gpuScore * 0.6);
+        // Console "Optimization Magic" (consoles perform better than specs suggest)
+        let consolePerf = (cpuScore + gpuScore) * 0.85 * (1 - thermalPenalty / 100);
 
         // --- C. COST & LOSS LEADER MATH ---
         const moboCost = mobo ? (mobo.raw.price || 0) : 0;
@@ -415,6 +422,8 @@ window.consoleArch = {
                 `;
             }
         }
+
+
 
         return { valid: errors.length === 0, manufacturingCost, consolePerf, errors, parts: { cpu, mobo, gpu, ram, sto }, stratText, profit };
     },

@@ -320,9 +320,9 @@ window.server = {
     getPartScore: function (part) {
         if (!part) return 0;
         if (part.raw?.benchmarks) {
-            return part.raw.benchmarks.multiScore || part.raw.benchmarks.score || part.score || 0;
+            return part.raw.benchmarks.multiScore || part.raw.benchmarks.gaming || part.raw.benchmarks.score || part.score || 0;
         }
-        return part.score || 0;
+        return part.score || parseInt(part.specs?.Score) || 0;
     },
 
     updatePhysics: function () {
@@ -404,15 +404,13 @@ window.server = {
         const rackWatts = realNodeWatts * inputs.nodesPerRack;
         const clusterRawWatts = rackWatts * inputs.rackCount;
 
-        // Cooling Limits
+        // Cooling (display only, does not affect compute)
         const effectiveCoolLimit = inputs.cooling.limit * inputs.rackDef.airflow;
-        let throttle = 1.0;
         let thermalStatus = "Optimal";
         let heatColor = "#00e676";
 
         if (rackWatts > effectiveCoolLimit) {
-            throttle = effectiveCoolLimit / rackWatts;
-            thermalStatus = `MELTDOWN (-${((1 - throttle) * 100).toFixed(0)}%)`;
+            thermalStatus = "Hot / Warning";
             heatColor = "#ff1744";
         } else if (rackWatts > effectiveCoolLimit * 0.85) {
             thermalStatus = "Hot / Warning";
@@ -421,29 +419,59 @@ window.server = {
 
         const totalFacWatts = clusterRawWatts * inputs.cooling.pue;
 
-        // Performance & Roofline TFLOPS
-        let cpuScore = this.getPartScore(inputs.cpu);
-        let gpuScore = this.getPartScore(inputs.gpu);
+        // Performance: Physics-Based TFLOPS
+        let cpuTFLOPS = 0;
+        if (inputs.cpu && inputs.cpu.raw) {
+            const r = inputs.cpu.raw;
+            let simdV = 1;
+            if (r.simd === 'AVX-512') simdV = 32;
+            else if (r.simd === 'AVX2') simdV = 16;
+            else if (r.simd === 'AVX') simdV = 8;
+            else if (r.simd === 'SSE') simdV = 4;
+            
+            const pCores = r.pCores || 0;
+            const pClock = r.pTurbo || r.pAllcore || 0;
+            const eCores = r.eCores || 0;
+            const eClock = r.eAllcore || 0;
+            const ipc = r.ipc || 1.0;
+            
+            const pTflops = (pCores * pClock * ipc * simdV) / 1000;
+            const eTflops = (eCores * eClock * ipc * simdV) / 1000;
+            cpuTFLOPS = (pTflops + eTflops) * inputs.cpuQty;
+        }
 
-        // Compute memory bandwidth ceiling
+        let gpuTFLOPS = 0;
+        if (inputs.gpu) {
+            // Pulling TFLOPS directly from what was calculated and saved in GPU R&D
+            let gpuFlopVal = inputs.gpu.raw?.tflops;
+
+            // Fallback for older/existing saves where it's only in the specs formatted string (e.g. "25.0 TFLOPS")
+            if (gpuFlopVal === undefined && inputs.gpu.specs && inputs.gpu.specs.Score) {
+                const scoreStr = String(inputs.gpu.specs.Score);
+                gpuFlopVal = parseFloat(scoreStr) || 0;
+                if (scoreStr.includes('EFLOPS')) {
+                    gpuFlopVal *= 1000000;
+                } else if (scoreStr.includes('PFLOPS')) {
+                    gpuFlopVal *= 1000;
+                } else if (scoreStr.includes('GFLOPS')) {
+                    gpuFlopVal /= 1000;
+                } else if (scoreStr.includes('MFLOPS')) {
+                    gpuFlopVal /= 1000000;
+                }
+                // (TFLOPS needs no conversion as it is the base unit)
+            }
+
+            gpuTFLOPS = (gpuFlopVal || 0) * inputs.gpuQty;
+        }
+
         const maxChannelsPerSocket = 8;
         const requestedChannels = inputs.ramQty / inputs.cpuQty;
-        const actualChannels = Math.min(maxChannelsPerSocket, requestedChannels);
+        const scaleFactor = 1.0;
 
-        const ramSpeed = inputs.ram ? (inputs.ram.raw?.speed || 3200) : 3200;
-        const memBandwidthBg = (actualChannels * ramSpeed * 8) / 1000; // GB/s approx
-        const bandwidthBonus = Math.min(2.0, memBandwidthBg / 100);
+        const nodeTflops = cpuTFLOPS + gpuTFLOPS;
+        const throttle = 1.0;
 
-        const rawFlops = ((cpuScore * inputs.cpuQty * 0.05) + (gpuScore * inputs.gpuQty * 0.4));
-        const rooflineFlops = rawFlops * bandwidthBonus * throttle;
-        const nodeTflops = rooflineFlops / 100;
-
-        // Topology Network Penalty Curve
-        let netEfficieny = inputs.topology.efficiency * inputs.nicDef.eff;
-        const nodePenalty = Math.max(0, (totalNodes - 200) * 0.0001); // -10% per 1000 nodes
-        let scaleFactor = Math.max(0.1, netEfficieny - nodePenalty);
-
-        const clusterTFLOPS = nodeTflops * totalNodes * scaleFactor;
+        const clusterTFLOPS = nodeTflops * totalNodes;
 
         let ranking = "Unranked";
         if (clusterTFLOPS > 100000) ranking = "#1 Global Supercomputer 🏆";
@@ -596,6 +624,8 @@ window.server = {
                     </li>
                 `;
             }
+
+
         }
     },
 

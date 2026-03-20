@@ -516,13 +516,13 @@ window.smartphone = {
         let degradation = batTech.deg - charge.batPenalty;
         if (degradation < 0.5) degradation = 0.5;
 
-        // --- D. BOTTLENECKS ---
-        let storageBottleneck = false;
+        // --- D. SYNERGY LIMITS ---
+        let storageLimit = false;
         if (cam && stoGen) {
             // High MP or 8K video needs UFS 3.1 minimum
             if ((cam.raw.mp > 100 || cam.raw.vid === '8K') && stoGen.speed < 2000) {
-                storageBottleneck = true;
-                errors.push("Storage Speed Bottleneck: Camera requires UFS 3.1+");
+                storageLimit = true;
+                errors.push("Storage Speed Limit: Camera requires UFS 3.1+");
             }
         }
 
@@ -535,7 +535,7 @@ window.smartphone = {
         // OS & RAM Generation Multipliers
         baseCpu *= ramGen.speedMult * os.perf;
         baseGpu *= ramGen.speedMult * os.perf;
-        if (storageBottleneck) baseCam *= 0.5;
+        if (storageLimit) baseCam *= 0.5;
 
         // Throttling under heavy load
         const peakTDP = cpuTDP + gpuTDP;

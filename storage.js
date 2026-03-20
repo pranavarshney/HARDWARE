@@ -1,6 +1,4 @@
 /* HARDWARE TYCOON: STORAGE ARCHITECT
- * PHYSICS ENGINE V1.0 (Throughput, Seek Time & Interface Bottlenecks)
- * Optimized for Flat Structure
  */
 
 window.storage = {
@@ -246,13 +244,10 @@ window.storage = {
     updatePhysics: function () {
         const d = this.scrapeData();
 
-        // 1. INTERFACE BOTTLENECK
+        // 1. INTERFACE LIMIT
         // Example: Plugging a 5000MB/s SSD into a SATA (600MB/s) port.
         const maxInterfaceSpeed = this.interfaces[d.inter] || 999999;
         let realSpeed = Math.min(d.speed, maxInterfaceSpeed);
-
-        let bottleneck = false;
-        if (d.speed > maxInterfaceSpeed) bottleneck = true;
 
         // 2. SEEK TIME (Latency)
         let seekTime = 0;
@@ -287,12 +282,8 @@ window.storage = {
         // 5. RENDER STATS
         const display = document.getElementById('sto-live-stats');
         if (display) {
-            const bottleColor = bottleneck ? '#ff4444' : '#00ff88';
-            const bottleText = bottleneck ? `CAPPED by ${d.inter}` : 'Unrestricted';
-
             display.innerHTML = `
-                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Real Speed:</span> <b style="color:${bottleColor}">${realSpeed.toFixed(0)} MB/s</b></li>
-                <li style="text-align:right; font-size:0.7em; color:${bottleColor}; margin-top:-4px; margin-bottom:5px;">${bottleText}</li>
+                <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Real Speed:</span> <b>${realSpeed.toFixed(0)} MB/s</b></li>
                 
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Seek Latency:</span> <b>${seekTime.toFixed(2)} ms</b></li>
                 <li style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>IOPS:</span> <b>${Math.floor(iops).toLocaleString()}</b></li>
@@ -301,7 +292,7 @@ window.storage = {
             `;
         }
 
-        return { realSpeed, loadScore, bottleneck, capacity: d.cap };
+        return { realSpeed, loadScore, capacity: d.cap };
     },
 
     scrapeData: function () {
@@ -392,7 +383,6 @@ window.storage = {
                 "Type": `${data.type} (${data.inter})`,
                 "Capacity": capLabel,
                 "Speed": `${results.realSpeed} MB/s`,
-                "Bottleneck": results.bottleneck ? "YES" : "NO",
                 "Score": Math.floor(results.loadScore)
             },
 

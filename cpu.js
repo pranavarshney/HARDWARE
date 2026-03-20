@@ -1,5 +1,4 @@
 /* HARDWARE TYCOON: CPU ARCHITECT
- * PHYSICS ENGINE V9.1 (Re-Tuned: All-Core Sustained, Core Scaling, SIMD Max Boost)
  */
 
 window.cpu = {
@@ -513,12 +512,12 @@ window.cpu = {
         const multiEClock = d.eAllCore * sustainedThrottle;
         const singlePClock = d.pTurbo * burstThrottle;
 
-        // 3. Bottlenecks (Memory & Scheduling)
+        // 3. Memory & Scheduling Overhead
         const memBandwidth = d.memChannels * 50;
         const requiredBandwidth = (d.pCores * multiPClock + d.eCores * multiEClock) * 1.5;
-        let memBottleneck = memBandwidth / Math.max(requiredBandwidth, 1);
-        if (memBottleneck > 1.0) memBottleneck = 1.0;
-        const memBonus = 0.5 + (0.5 * Math.pow(memBottleneck, 0.5));
+        let memEfficiency = memBandwidth / Math.max(requiredBandwidth, 1);
+        if (memEfficiency > 1.0) memEfficiency = 1.0;
+        const memBonus = 0.5 + (0.5 * Math.pow(memEfficiency, 0.5));
 
         // Non-Linear Core Scaling (Diminishing returns for massive core counts)
         const coreScalingPenalty = Math.pow(totalCores, 0.85) / totalCores;
